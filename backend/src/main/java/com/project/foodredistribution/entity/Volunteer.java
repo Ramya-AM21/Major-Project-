@@ -25,7 +25,14 @@ public class Volunteer {
 
     private Double reliabilityScore = 1.0; // 0.0 to 1.0
 
+    private Integer balanceTokens = 0;
+
+    private Double latitude;
+
+    private Double longitude;
+
     public Volunteer() {
+        this.balanceTokens = 0;
     }
 
     public Volunteer(User user) {
@@ -35,7 +42,14 @@ public class Volunteer {
         this.totalDeliveries = 0;
         this.successfulDeliveries = 0;
         this.reliabilityScore = 1.0;
+        this.balanceTokens = 0;
     }
+
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
+
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
 
     // Getters and Setters
     public UUID getId() { return id; }
@@ -58,4 +72,7 @@ public class Volunteer {
 
     public Double getReliabilityScore() { return reliabilityScore; }
     public void setReliabilityScore(Double reliabilityScore) { this.reliabilityScore = reliabilityScore; }
+
+    public Integer getBalanceTokens() { return balanceTokens; }
+    public void setBalanceTokens(Integer balanceTokens) { this.balanceTokens = balanceTokens; }
 }

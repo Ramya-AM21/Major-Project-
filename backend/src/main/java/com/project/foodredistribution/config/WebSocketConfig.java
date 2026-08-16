@@ -1,0 +1,24 @@
+package com.project.foodredistribution.config;
+
+import com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.socket.config.annotation.EnableWebSocket;
+import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
+import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+
+@Configuration
+@EnableWebSocket
+public class WebSocketConfig implements WebSocketConfigurer {
+
+    private final LiveTrackingWebSocketHandler liveTrackingWebSocketHandler;
+
+    public WebSocketConfig(LiveTrackingWebSocketHandler liveTrackingWebSocketHandler) {
+        this.liveTrackingWebSocketHandler = liveTrackingWebSocketHandler;
+    }
+
+    @Override
+    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        registry.addHandler(liveTrackingWebSocketHandler, "/ws/tracking")
+                .setAllowedOrigins("*");
+    }
+}

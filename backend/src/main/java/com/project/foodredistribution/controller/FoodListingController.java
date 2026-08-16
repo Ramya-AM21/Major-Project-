@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/food")
+@RequestMapping({"/api/v1/food", "/api/food-listings"})
 @CrossOrigin(origins = "*")
 public class FoodListingController {
 

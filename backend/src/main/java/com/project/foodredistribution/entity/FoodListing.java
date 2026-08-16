@@ -46,6 +46,16 @@ public class FoodListing {
     @Column(nullable = false)
     private Double pickupLongitude;
 
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "destination_zone_id")
+    private Zone destinationZone;
+
+    private String destinationAddress;
+
+    private Double destinationLatitude;
+
+    private Double destinationLongitude;
+
     @Column(nullable = false)
     private String status = "AVAILABLE"; // AVAILABLE, MATCHED, PICKED_UP, IN_TRANSIT, DELIVERED, EXPIRED, CANCELLED
 
@@ -94,6 +104,18 @@ public class FoodListing {
 
     public Double getPickupLongitude() { return pickupLongitude; }
     public void setPickupLongitude(Double pickupLongitude) { this.pickupLongitude = pickupLongitude; }
+
+    public Zone getDestinationZone() { return destinationZone; }
+    public void setDestinationZone(Zone destinationZone) { this.destinationZone = destinationZone; }
+
+    public String getDestinationAddress() { return destinationAddress; }
+    public void setDestinationAddress(String destinationAddress) { this.destinationAddress = destinationAddress; }
+
+    public Double getDestinationLatitude() { return destinationLatitude; }
+    public void setDestinationLatitude(Double destinationLatitude) { this.destinationLatitude = destinationLatitude; }
+
+    public Double getDestinationLongitude() { return destinationLongitude; }
+    public void setDestinationLongitude(Double destinationLongitude) { this.destinationLongitude = destinationLongitude; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

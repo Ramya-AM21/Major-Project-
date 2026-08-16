@@ -26,17 +26,70 @@ public class VolunteerService {
     private final FoodListingRepository foodListingRepository;
     private final ZoneRepository zoneRepository;
     private final MatchingService matchingService;
+    private final com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler;
 
     public VolunteerService(VolunteerRepository volunteerRepository,
                             VolunteerRouteRepository volunteerRouteRepository,
                             FoodListingRepository foodListingRepository,
                             ZoneRepository zoneRepository,
-                            MatchingService matchingService) {
+                            MatchingService matchingService,
+                            com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler) {
         this.volunteerRepository = volunteerRepository;
         this.volunteerRouteRepository = volunteerRouteRepository;
         this.foodListingRepository = foodListingRepository;
         this.zoneRepository = zoneRepository;
         this.matchingService = matchingService;
+        this.webSocketHandler = webSocketHandler;
+    }
+
+    @Transactional
+    public VolunteerRoute updateRouteLocation(UUID routeId, Double latitude, Double longitude, String email) {
+        VolunteerRoute route = volunteerRouteRepository.findById(routeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Route not found: " + routeId));
+
+        if (!route.getVolunteer().getUser().getEmail().equals(email)) {
+            throw new org.springframework.security.access.AccessDeniedException("Unauthorized to update route location");
+        }
+
+        route.setCurrentLatitude(latitude);
+        route.setCurrentLongitude(longitude);
+        route.setLastLocationUpdate(java.time.LocalDateTime.now());
+        VolunteerRoute saved = volunteerRouteRepository.save(route);
+
+        // Broadcast telemetry details via WS
+        String telemetryData = String.format(
+            "{\"routeId\":\"%s\",\"volunteerId\":\"%s\",\"latitude\":%f,\"longitude\":%f}",
+            routeId, route.getVolunteer().getId(), latitude, longitude
+        );
+        webSocketHandler.broadcastUpdate("LOCATION_UPDATE", telemetryData);
+
+        return saved;
+    }
+
+    @Transactional
+    public void updateVolunteerLocation(Double latitude, Double longitude, String email) {
+        Volunteer volunteer = getVolunteerByEmail(email);
+        volunteer.setLatitude(latitude);
+        volunteer.setLongitude(longitude);
+        volunteerRepository.save(volunteer);
+
+        // Update all ACTIVE routes for the volunteer
+        List<VolunteerRoute> routes = volunteerRouteRepository.findByVolunteerId(volunteer.getId());
+        for (VolunteerRoute route : routes) {
+            if (route.getStatus() == null || "ACTIVE".equalsIgnoreCase(route.getStatus())) {
+                route.setCurrentLatitude(latitude);
+                route.setCurrentLongitude(longitude);
+                route.setLastLocationUpdate(java.time.LocalDateTime.now());
+                volunteerRouteRepository.save(route);
+            }
+        }
+
+        // Broadcast telemetry details via WS
+        String telemetryData = String.format(
+            "{\"volunteerId\":\"%s\",\"latitude\":%f,\"longitude\":%f,\"timestamp\":\"%s\"}",
+            volunteer.getId(), latitude, longitude, java.time.LocalDateTime.now().toString()
+        );
+        webSocketHandler.broadcastUpdate("VOLUNTEER_LOCATION_UPDATE", telemetryData);
     }
 
     public Volunteer getVolunteerByEmail(String email) {
@@ -70,19 +123,60 @@ public class VolunteerService {
         Volunteer volunteer = getVolunteerByEmail(email);
         List<VolunteerRoute> routes = volunteerRouteRepository.findByVolunteerId(volunteer.getId());
         List<FoodListing> availableListings = foodListingRepository.findByStatus("AVAILABLE");
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        List<FoodListing> validListings = new java.util.ArrayList<>();
+        for (FoodListing food : availableListings) {
+            if (food.getExpiryTime() != null && food.getExpiryTime().isBefore(now)) {
+                food.setStatus("EXPIRED");
+                foodListingRepository.save(food);
+            } else {
+                validListings.add(food);
+            }
+        }
         List<Zone> zones = zoneRepository.findAll();
 
         List<TaskMatchRecommendation> recommendations = new ArrayList<>();
 
-        for (VolunteerRoute route : routes) {
-            for (FoodListing food : availableListings) {
-                // Find a zone with capacity or pick the nearest eligible zone
-                for (Zone zone : zones) {
-                    if ("ACTIVE".equalsIgnoreCase(zone.getStatus())) {
+        List<VolunteerRoute> activeRoutes = new java.util.ArrayList<>();
+        for (VolunteerRoute r : routes) {
+            if (r.getStatus() == null || "ACTIVE".equalsIgnoreCase(r.getStatus())) {
+                activeRoutes.add(r);
+            }
+        }
+
+        if (activeRoutes.isEmpty()) {
+            // Fallback: If no ACTIVE routes are registered, recommend all available tasks by matching to food's destination zone
+            for (FoodListing food : validListings) {
+                Zone zone = food.getDestinationZone();
+                if (zone == null && !zones.isEmpty()) {
+                    zone = zones.get(0);
+                }
+                if (zone != null && "ACTIVE".equalsIgnoreCase(zone.getStatus())) {
+                    double deviation = 1.2; // Static virtual deviation
+                    // Simulate a virtual route directly from pickup to delivery
+                    VolunteerRoute virtualRoute = new VolunteerRoute();
+                    virtualRoute.setStartLatitude(food.getPickupLatitude());
+                    virtualRoute.setStartLongitude(food.getPickupLongitude());
+                    virtualRoute.setEndLatitude(zone.getLatitude());
+                    virtualRoute.setEndLongitude(zone.getLongitude());
+                    
+                    double score = matchingService.calculateMatchingScore(volunteer, virtualRoute, food, zone);
+                    recommendations.add(new TaskMatchRecommendation(food, zone, null, deviation, score));
+                }
+            }
+        } else {
+            for (VolunteerRoute route : activeRoutes) {
+                for (FoodListing food : validListings) {
+                    Zone zone = food.getDestinationZone();
+                    if (zone == null && !zones.isEmpty()) {
+                        zone = zones.get(0);
+                    }
+                    if (zone != null && "ACTIVE".equalsIgnoreCase(zone.getStatus())) {
                         double deviation = matchingService.calculateRouteDeviation(route, food, zone);
+                        double maxDev = route.getMaxDeviation() != null ? route.getMaxDeviation() : 15.0;
                         
-                        // We only recommend tasks if the extra travel is within reasonable bounds (e.g., 12.0 km)
-                        if (deviation <= 12.0) {
+                        // Recommend tasks within a reasonable extra travel range
+                        if (deviation <= maxDev) {
                             double score = matchingService.calculateMatchingScore(volunteer, route, food, zone);
                             recommendations.add(new TaskMatchRecommendation(food, zone, route.getId(), deviation, score));
                         }

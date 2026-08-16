@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   LogOut, Menu, X, Bell, User as UserIcon, Shield, 
-  MapPin, Truck, Utensils, BarChart3, AlertTriangle, Layers, Route
+  MapPin, Truck, Utensils, BarChart3, AlertTriangle, Layers, Route, Award
 } from 'lucide-react';
+import axios from 'axios';
 
 interface SidebarItem {
   label: string;
@@ -19,11 +20,96 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  // Demo notifications state
-  const [notifications, setNotifications] = useState([
-    { id: '1', title: 'New route match detected', desc: 'A 35-meal donation is close to your route.', time: '5m ago', read: false },
-    { id: '2', title: 'Pickup OTP verified', desc: ' Rahul verified pickup successfully.', time: '1h ago', read: true },
-  ]);
+  // Real Notification State
+  interface SystemNotification {
+    id: string;
+    title: string;
+    message: string;
+    read: boolean;
+    createdAt?: string;
+  }
+
+  const [notifications, setNotifications] = useState<SystemNotification[]>([]);
+
+  const fetchNotifications = async () => {
+    try {
+      const authHeader = `Bearer ${localStorage.getItem('token')}`;
+      const res = await axios.get('/api/v1/notifications', {
+        headers: { Authorization: authHeader }
+      });
+      setNotifications(res.data || []);
+    } catch (err) {
+      console.warn("Failed to load user notifications:", err);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      const authHeader = `Bearer ${localStorage.getItem('token')}`;
+      await axios.post('/api/v1/notifications/read-all', {}, {
+        headers: { Authorization: authHeader }
+      });
+      fetchNotifications();
+    } catch (err) {
+      console.warn("Failed to mark all read:", err);
+    }
+  };
+
+  const handleMarkOneRead = async (nid: string) => {
+    try {
+      const authHeader = `Bearer ${localStorage.getItem('token')}`;
+      await axios.post(`/api/v1/notifications/${nid}/read`, {}, {
+        headers: { Authorization: authHeader }
+      });
+      fetchNotifications();
+    } catch (err) {
+      console.warn("Failed to mark single notification read:", err);
+    }
+  };
+
+  const formatTime = (timeStr?: string) => {
+    if (!timeStr) return '';
+    try {
+      const diff = new Date().getTime() - new Date(timeStr).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'Just now';
+      if (mins < 60) return `${mins}m ago`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours}h ago`;
+      return new Date(timeStr).toLocaleDateString();
+    } catch {
+      return '';
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    fetchNotifications();
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//localhost:8081/ws/tracking`;
+
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.type === 'NOTIFICATION') {
+            fetchNotifications();
+          }
+        } catch (err) {
+          // ignore
+        }
+      };
+    } catch (e) {
+      console.warn("WebSocket notification listener failed:", e);
+    }
+
+    return () => {
+      if (ws) ws.close();
+    };
+  }, [user]);
 
   if (!user) return null;
 
@@ -40,7 +126,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         return [
           { label: 'Dashboard', path: '/volunteer/dashboard', icon: <Truck className="w-5 h-5" /> },
           { label: 'Travel Routes', path: '/volunteer/routes', icon: <Route className="w-5 h-5" /> },
-          { label: 'Find Matches', path: '/volunteer/tasks', icon: <Layers className="w-5 h-5" /> },
+          { label: 'Find Matching Food', path: '/volunteer/matching', icon: <Layers className="w-5 h-5" /> },
+          { label: 'Redeem Rewards', path: '/volunteer/rewards', icon: <Award className="w-5 h-5" /> },
         ];
       case 'COORDINATOR':
         return [
@@ -67,49 +154,52 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] flex">
+    <div className="min-h-screen bg-natural-bg text-natural-text flex organic-pattern">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex md:flex-col md:w-64 bg-white border-r border-gray-200">
+      <aside className="hidden md:flex md:flex-col md:w-60 bg-white border-r border-natural-border">
         {/* Brand Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-gray-150">
-          <Link to="/" className="flex items-center space-x-2">
-            <span className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white font-bold text-lg">
-              E
-            </span>
-            <span className="font-display font-bold text-gray-900 tracking-tight">E-Meal Logistics</span>
+        <div className="h-16 flex items-center px-6 border-b border-natural-border bg-white">
+          <Link to="/" className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-xs">
+              <span className="font-display font-black text-sm tracking-tighter">eM</span>
+            </div>
+            <div className="flex flex-col text-left">
+              <span className="font-display font-black text-xs text-natural-text tracking-tight uppercase leading-none">E-Meal</span>
+              <span className="text-[8px] font-bold text-brand-500 uppercase tracking-widest leading-none mt-0.5 font-mono">Route Rescue</span>
+            </div>
           </Link>
         </div>
 
         {/* User Card */}
-        <div className="p-4 border-b border-gray-100 bg-brand-50/40">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-brand-600 text-white flex items-center justify-center font-semibold">
+        <div className="p-4 border-b border-natural-border bg-white">
+          <div className="flex items-center space-x-3 p-3 rounded-xl border border-natural-border bg-brand-50/50">
+            <div className="w-9 h-9 rounded-full bg-brand-600/10 text-brand-600 border border-brand-200 flex items-center justify-center font-bold text-sm">
               {user.name.charAt(0)}
             </div>
-            <div className="overflow-hidden">
-              <h4 className="font-medium text-sm text-gray-900 truncate">{user.name}</h4>
-              <span className="text-xs text-brand-700 bg-brand-100 px-2 py-0.5 rounded-full font-medium inline-block mt-0.5">
-                {user.role}
+            <div className="overflow-hidden text-left">
+              <h4 className="font-bold text-xs text-natural-text truncate">{user.name}</h4>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand-50 border border-brand-100 text-brand-700 text-[8px] font-black font-mono tracking-wider uppercase mt-1">
+                ● {user.role.toLowerCase()}
               </span>
             </div>
           </div>
         </div>
 
         {/* Menu Nav Links */}
-        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto bg-white">
           {menuItems.map((item) => {
             const isActive = location.pathname.startsWith(item.path);
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+                className={`flex items-center px-4 py-2 rounded-lg text-xs font-bold transition-all uppercase tracking-wider ${
                   isActive 
-                    ? 'bg-brand-600 text-white shadow-sm' 
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    ? 'bg-brand-600 text-white shadow-xs font-black' 
+                    : 'text-natural-muted hover:bg-brand-50 hover:text-brand-700'
                 }`}
               >
-                <span className="mr-3">{item.icon}</span>
+                <span className="mr-3 stroke-[2.5]">{item.icon}</span>
                 {item.label}
               </Link>
             );
@@ -117,12 +207,12 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         </nav>
 
         {/* Footer actions */}
-        <div className="p-4 border-t border-gray-150">
+        <div className="p-4 border-t border-natural-border bg-white">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center px-4 py-3 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+            className="w-full flex items-center px-4 py-2.5 rounded-lg text-xs font-bold text-red-650 hover:bg-red-50 hover:text-red-750 transition-colors uppercase tracking-wider"
           >
-            <LogOut className="w-5 h-5 mr-3" />
+            <LogOut className="w-4 h-4 mr-3" />
             Logout
           </button>
         </div>
@@ -131,17 +221,17 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
       {/* Main Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Header */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-8 z-10">
+        <header className="h-16 bg-[#FAF9F5] border-b border-natural-border flex items-center justify-between px-6 z-10">
           <div className="flex items-center">
             {/* Mobile Menu Trigger */}
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 mr-2"
+              className="md:hidden p-2 rounded-lg text-natural-muted hover:bg-brand-50 mr-2 border border-natural-border bg-white"
             >
-              <Menu className="w-6 h-6" />
+              <Menu className="w-5 h-5" />
             </button>
-            <h2 className="text-lg font-semibold text-gray-800 hidden md:block">
-              {user.role.charAt(0) + user.role.slice(1).toLowerCase()} Dashboard
+            <h2 className="text-xs font-bold text-natural-text uppercase tracking-wider hidden md:block">
+              {user.role} Control Panel
             </h2>
           </div>
 
@@ -150,54 +240,64 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             <div className="relative">
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="p-2 rounded-lg text-gray-650 hover:bg-gray-50 relative border border-gray-100"
+                className="p-2 rounded-lg text-natural-muted hover:bg-natural-bg relative border border-natural-border bg-white"
               >
-                <Bell className="w-5 h-5" />
+                <Bell className="w-4 h-4" />
                 {unreadNotifications > 0 && (
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-550 border-2 border-white rounded-full bg-red-600"></span>
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent-500 rounded-full border border-white"></span>
                 )}
               </button>
 
               {notificationsOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-lg py-2 z-50">
-                  <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                    <span className="font-semibold text-sm text-gray-800">Notifications</span>
+                <div className="absolute right-0 mt-2 w-80 bg-white border border-natural-border rounded-xl shadow-sm py-1.5 z-50">
+                  <div className="px-4 py-2 border-b border-natural-border flex justify-between items-center bg-[#FAF9F5]">
+                    <span className="font-bold text-xs uppercase tracking-wider text-natural-text">Rescues Audits</span>
                     <button 
-                      onClick={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
-                      className="text-xs text-brand-600 font-medium hover:underline"
+                      onClick={handleMarkAllRead}
+                      className="text-[10px] uppercase font-bold text-brand-660 hover:text-brand-850 hover:underline"
                     >
-                      Clear unread
+                      Clear All
                     </button>
                   </div>
-                  <div className="divide-y divide-gray-100 max-h-60 overflow-y-auto">
-                    {notifications.map((n) => (
-                      <div key={n.id} className={`p-3 text-left ${n.read ? 'bg-white' : 'bg-brand-50/20'}`}>
-                        <div className="flex justify-between items-start">
-                          <span className="text-xs font-semibold text-gray-900">{n.title}</span>
-                          <span className="text-[10px] text-gray-400">{n.time}</span>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-0.5">{n.desc}</p>
+                  <div className="divide-y divide-natural-border max-h-60 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="p-4 text-center text-natural-muted text-xs font-semibold">
+                        No notifications yet.
                       </div>
-                    ))}
+                    ) : (
+                      notifications.map((n) => (
+                        <div 
+                          key={n.id} 
+                          onClick={() => !n.read && handleMarkOneRead(n.id)}
+                          className={`p-3 text-left transition-all cursor-pointer ${n.read ? 'bg-white hover:bg-natural-bg' : 'bg-brand-50/30 hover:bg-brand-50/50'}`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <span className="text-[11px] font-bold text-natural-text">{n.title}</span>
+                            <span className="text-[9px] text-natural-muted font-bold">{formatTime(n.createdAt)}</span>
+                          </div>
+                          <p className="text-xs text-natural-muted mt-1 leading-snug">{n.message}</p>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
             {/* User Profile display */}
-            <div className="flex items-center space-x-2 bg-gray-50 hover:bg-gray-100 py-1.5 px-3 rounded-full border border-gray-100">
-              <div className="w-7 h-7 rounded-full bg-brand-500 text-white flex items-center justify-center font-medium text-xs">
+            <div className="flex items-center space-x-2 bg-[#FAF9F5] py-1 px-3 rounded-lg border border-natural-border">
+              <div className="w-6 h-6 rounded bg-brand-600 text-white flex items-center justify-center font-bold text-xs">
                 {user.name.charAt(0)}
               </div>
-              <span className="text-xs font-medium text-gray-700 hidden sm:inline-block">
-                {user.name.split(' ')[0]}
+              <span className="text-xs font-semibold text-natural-text hidden sm:inline-block">
+                {user.name}
               </span>
             </div>
           </div>
         </header>
 
         {/* Content Body */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+        <main className="flex-1 overflow-y-auto p-6 bg-[#FAF9F5]">
           {children}
         </main>
       </div>
@@ -206,11 +306,11 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
           <div className="fixed inset-0 bg-black bg-opacity-40" onClick={() => setMobileMenuOpen(false)}></div>
-          <div className="relative flex flex-col w-64 max-w-xs bg-white h-full shadow-2xl p-4">
+          <div className="relative flex flex-col w-64 max-w-xs bg-white h-full shadow-2xl p-4 border-r border-natural-border">
             <div className="flex justify-between items-center mb-6">
-              <span className="font-display font-bold text-gray-900">Menu</span>
-              <button onClick={() => setMobileMenuOpen(false)} className="p-2 rounded hover:bg-gray-100">
-                <X className="w-6 h-6" />
+              <span className="font-display font-black text-natural-text text-xs uppercase tracking-wider">Menu Nav</span>
+              <button onClick={() => setMobileMenuOpen(false)} className="p-2 rounded-lg hover:bg-brand-50 border border-natural-border bg-[#FAF9F5] text-natural-muted">
+                <X className="w-5 h-5" />
               </button>
             </div>
             <nav className="flex-1 space-y-1">
@@ -219,18 +319,18 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                   key={item.path}
                   to={item.path}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="flex items-center px-4 py-2.5 rounded-lg text-xs font-bold text-natural-muted hover:bg-brand-50 hover:text-brand-650 transition-all uppercase tracking-wider"
                 >
-                  <span className="mr-3 text-gray-400">{item.icon}</span>
+                  <span className="mr-3 text-natural-muted">{item.icon}</span>
                   {item.label}
                 </Link>
               ))}
             </nav>
             <button
               onClick={handleLogout}
-              className="mt-auto flex items-center justify-center px-4 py-3 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50"
+              className="mt-auto flex items-center justify-center px-4 py-2.5 rounded-lg text-xs font-bold text-red-650 hover:bg-red-50 transition-colors uppercase tracking-wider"
             >
-              <LogOut className="w-5 h-5 mr-3" />
+              <LogOut className="w-4 h-4 mr-3" />
               Logout
             </button>
           </div>

@@ -98,6 +98,7 @@ public class AnalyticsService {
         dto.setSuccessfulDeliveries(volunteer.getSuccessfulDeliveries());
         dto.setReliabilityScore(volunteer.getReliabilityScore());
         dto.setMealsDelivered(meals);
+        dto.setTokens(volunteer.getBalanceTokens() != null ? volunteer.getBalanceTokens() : 0);
         return dto;
     }
 

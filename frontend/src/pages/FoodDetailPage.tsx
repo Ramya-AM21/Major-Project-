@@ -28,6 +28,8 @@ interface DeliveryTask {
   routeDistance: number;
   routeDeviation: number;
   matchingScore: number;
+  currentLatitude?: number;
+  currentLongitude?: number;
   volunteer?: {
     user: {
       name: string;
@@ -90,8 +92,41 @@ export const FoodDetailPage: React.FC = () => {
   useEffect(() => {
     fetchDetails();
     const timer = setInterval(() => setNowTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, [id]);
+    
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//localhost:8081/ws/tracking`;
+    
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(wsUrl);
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data && data.payload) {
+            const payload = typeof data.payload === 'string' ? JSON.parse(data.payload) : data.payload;
+            const targetTaskId = payload.taskId || payload.id;
+            if (targetTaskId) {
+              fetchDetails();
+            }
+          }
+        } catch (err) {
+          // Ignore parsing issues
+        }
+      };
+      ws.onerror = (e) => {
+        console.warn("WebSocket details tracing connection error:", e);
+      };
+    } catch (e) {
+      console.warn("WebSocket details initial connection failed:", e);
+    }
+
+    return () => {
+      clearInterval(timer);
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [id, task?.id]);
 
   if (loading) {
     return (
@@ -172,6 +207,17 @@ export const FoodDetailPage: React.FC = () => {
     });
   }
 
+  if (task && task.currentLatitude && task.currentLongitude) {
+    mapMarkers.push({
+      id: 'volunteer',
+      latitude: task.currentLatitude,
+      longitude: task.currentLongitude,
+      title: task.volunteer?.user?.name || 'Volunteer',
+      description: 'Volunteer is currently in transit with surplus items',
+      role: 'CURRENT' as const
+    });
+  }
+
   const mapPolyline: [number, number][] = (task && task.zone) ? [
     [listing.pickupLatitude, listing.pickupLongitude],
     [task.zone.latitude, task.zone.longitude]
@@ -180,12 +226,12 @@ export const FoodDetailPage: React.FC = () => {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Navigation header */}
-      <div className="flex items-center">
+      <div className="flex items-center text-left">
         <Link
           to="/provider/dashboard"
-          className="flex items-center text-xs font-semibold text-gray-500 hover:text-gray-900 transition-colors gap-1.5"
+          className="inline-flex items-center text-[10px] font-bold text-brand-500 hover:text-brand-700 transition-colors gap-1 uppercase tracking-wider"
         >
-          <ArrowLeft className="w-5 h-5" /> Back to surplus ledger
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to surplus ledger
         </Link>
       </div>
 
@@ -193,58 +239,58 @@ export const FoodDetailPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Left pane: Details and Timeline */}
-        <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-gray-200 shadow-xs space-y-6 text-left">
+        <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-natural-border shadow-xs space-y-6 text-left">
           <div className="flex justify-between items-start">
             <div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                listing.category === 'VEG' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+              <span className={`text-[9px] px-2.5 py-0.5 rounded-full border font-black uppercase tracking-wider ${
+                listing.category === 'VEG' ? 'bg-brand-50 border-brand-100 text-brand-700' : 'bg-red-50 border-red-200 text-red-750'
               }`}>
                 {listing.category}
               </span>
-              <h2 className="text-xl font-display font-extrabold text-gray-900 tracking-tight mt-1">
+              <h2 className="text-xl font-display font-black text-natural-text tracking-tight mt-2.5 uppercase">
                 {listing.foodName}
               </h2>
             </div>
             <div className="text-right">
-              <span className="text-[10px] uppercase font-bold text-gray-400 block">Quantity</span>
-              <span className="font-display font-black text-gray-950">{listing.quantity} {listing.unit}</span>
+              <span className="text-[9px] uppercase font-bold text-natural-muted tracking-wider block">Quantity</span>
+              <span className="font-mono font-black text-natural-text text-base">{listing.quantity} {listing.unit}</span>
             </div>
           </div>
 
           {/* Expiry Bar */}
-          <div className="p-4 bg-brand-50/40 border border-brand-100 rounded-xl flex items-center justify-between">
-            <span className="text-xs text-brand-850 font-semibold flex items-center gap-1.5">
-              <Clock className="w-4 h-4" /> Consumable Safety Timer
+          <div className="p-4 bg-brand-50/50 border border-brand-100 rounded-xl flex items-center justify-between">
+            <span className="text-xs text-brand-850 font-bold flex items-center gap-1.5 uppercase tracking-wider">
+              <Clock className="w-4 h-4 text-brand-600" /> Consumable Safety Timer
             </span>
-            <span className={`text-sm font-mono font-black py-0.5 px-3 rounded-full ${
-              isExpired ? 'bg-red-100 text-red-800' : 'bg-brand-100 text-brand-900'
+            <span className={`text-xs font-mono font-black py-1 px-3 rounded-md border ${
+              isExpired ? 'bg-red-105 border-red-200 text-red-800' : 'bg-brand-100 border-brand-200 text-brand-850'
             }`}>
               {getTimerString()}
             </span>
           </div>
 
           {/* Timeline workflow details */}
-          <div className="space-y-4 pt-4 border-t border-gray-150">
-            <h3 className="font-display font-semibold text-sm text-gray-901">Redistribution Timeline</h3>
+          <div className="space-y-4 pt-4 border-t border-natural-border">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Redistribution Timeline</h3>
             
             {currentStep < 0 ? (
-              <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-750 font-medium">
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-750 font-semibold">
                 {currentStep === -1 ? 'This surplus listing expired before a volunteer matched.' : 'This surplus listing was cancelled.'}
               </div>
             ) : (
-              <div className="relative pl-6 space-y-6 before:absolute before:top-2 before:bottom-2 before:left-[11px] before:w-0.5 before:bg-gray-150">
+              <div className="relative pl-6 space-y-6 before:absolute before:top-2 before:bottom-2 before:left-[11px] before:w-0.5 before:bg-natural-border">
                 {stages.map((st, idx) => {
                   const done = idx <= currentStep;
                   return (
                     <div key={st.label} className="relative flex items-start text-left">
-                      <div className={`absolute top-0.5 -left-[20px] w-[11px] h-[11px] rounded-full border-2 transition-all ${
-                        done ? 'bg-brand-600 border-white ring-2 ring-brand-200' : 'bg-white border-gray-300'
+                      <div className={`absolute top-0.5 left-[-20px] w-2.5 h-2.5 rounded-full border transition-all ${
+                        done ? 'bg-brand-600 border-white ring-2 ring-brand-100' : 'bg-white border-gray-300'
                       }`}></div>
                       <div>
-                        <h4 className={`text-xs font-bold ${done ? 'text-gray-900' : 'text-gray-400'}`}>
+                        <h4 className={`text-xs font-bold ${done ? 'text-natural-text font-black' : 'text-natural-muted'}`}>
                           {st.label}
                         </h4>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{st.desc}</p>
+                        <p className="text-[10px] text-natural-muted mt-0.5 font-semibold">{st.desc}</p>
                       </div>
                     </div>
                   );
@@ -255,41 +301,63 @@ export const FoodDetailPage: React.FC = () => {
 
           {/* Coordination Details */}
           {task && (
-            <div className="space-y-4 pt-4 border-t border-gray-150">
-              <h3 className="font-display font-semibold text-sm text-gray-901">Matching Coordination</h3>
+            <div className="space-y-4 pt-4 border-t border-natural-border">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Matching Coordination</h3>
               
-              <div className="grid grid-cols-2 gap-4 text-xs font-medium">
-                <div className="bg-[#FAF9F6] p-3 rounded-xl border border-gray-100">
-                  <span className="text-[10px] text-gray-405 font-bold block uppercase tracking-wider">Matched Volunteer</span>
-                  <span className="font-semibold text-gray-900 mt-1 block">
+              <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
+                <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border">
+                  <span className="text-[9px] text-natural-muted font-bold block uppercase tracking-wider">Matched Volunteer</span>
+                  <span className="font-bold text-natural-text mt-1 block">
                     {task.volunteer ? task.volunteer.user.name : 'Rahul Sharma'}
                   </span>
-                  <span className="text-gray-400 block mt-0.5">
+                  <span className="text-natural-muted block mt-0.5 font-normal">
                     {task.volunteer ? task.volunteer.user.phoneNumber : '9876543210'}
                   </span>
                 </div>
 
-                <div className="bg-[#FAF9F6] p-3 rounded-xl border border-gray-100">
-                  <span className="text-[10px] text-gray-405 font-bold block uppercase tracking-wider">Drop Shelter Zone</span>
-                  <span className="font-semibold text-gray-900 mt-1 block">
+                <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border">
+                  <span className="text-[9px] text-natural-muted font-bold block uppercase tracking-wider">Drop Shelter Zone</span>
+                  <span className="font-bold text-natural-text mt-1 block">
                     {task.zone ? task.zone.name : 'Central Community Zone'}
                   </span>
-                  <p className="text-[10px] text-gray-400 mt-0.5 leading-relaxed truncate">
+                  <p className="text-[10px] text-natural-muted mt-0.5 leading-relaxed truncate font-normal">
                     {task.zone ? task.zone.address : 'Cubbon Road Shelter'}
                   </p>
                 </div>
               </div>
 
               {/* OTP presentation for Provider screen */}
-              {verification?.pickupOtp && listing.status === 'AVAILABLE' && (
-                <div className="p-3 bg-brand-50 border border-brand-100 rounded-xl text-center">
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-brand-700 block">Pickup Security OTP</span>
-                  <span className="text-xl font-mono font-black text-brand-900 tracking-widest mt-1 block">
+              {verification?.pickupOtp && (listing.status === 'AVAILABLE' || listing.status === 'MATCHED') && (
+                <div className="p-4 bg-brand-50 border border-brand-100 rounded-xl text-center">
+                  <span className="text-[9px] uppercase font-bold tracking-wider text-brand-700 block">Pickup Security OTP</span>
+                  <span className="text-xl font-mono font-black text-brand-650 tracking-widest mt-1 block">
                     {verification.pickupOtp}
                   </span>
-                  <span className="text-[10px] text-brand-700 block mt-1">
+                  <span className="text-[10px] text-brand-600 block mt-1.5 font-semibold">
                     Provide this code to the volunteer upon hand-off.
                   </span>
+                </div>
+              )}
+
+              {/* Live coordinates & transit details for Provider screen */}
+              {listing.status === 'IN_TRANSIT' && task && (
+                <div className="p-4 bg-brand-50/50 border border-brand-100 rounded-xl space-y-2">
+                  <span className="text-[9px] uppercase font-bold tracking-wider text-brand-850 block">Live Courier Route Details</span>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-bold text-natural-text">
+                    <div>
+                      <span className="text-[9px] text-natural-muted block font-semibold uppercase tracking-wider">Remaining Est Distance</span>
+                      <span className="font-mono">{task.routeDistance ? task.routeDistance.toFixed(2) : "1.8"} km</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-natural-muted block font-semibold uppercase tracking-wider">Telemetry Status</span>
+                      <span className="text-brand-700 font-bold uppercase">In Transit</span>
+                    </div>
+                    {task.currentLatitude && task.currentLongitude && (
+                      <div className="col-span-2 border-t border-brand-100 pt-2 font-mono text-[9px] text-natural-muted font-bold">
+                        GPS Coordinates: {task.currentLatitude.toFixed(5)}, {task.currentLongitude.toFixed(5)}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -297,9 +365,9 @@ export const FoodDetailPage: React.FC = () => {
         </div>
 
         {/* Right pane: Map View and details */}
-        <div className="lg:col-span-5 space-y-6 flex flex-col">
+        <div className="lg:col-span-5 space-y-6 flex flex-col min-h-[350px]">
           {/* Map */}
-          <div className="h-72 bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden p-3 flex-1">
+          <div className="h-72 bg-white border border-natural-border rounded-2xl shadow-xs overflow-hidden p-3 flex-1">
             <MapView
               markers={mapMarkers}
               polylinePoints={mapPolyline}
@@ -309,23 +377,23 @@ export const FoodDetailPage: React.FC = () => {
 
           {/* Audit parameters */}
           {verification?.deliveryTimestamp && (
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs text-left text-xs space-y-3">
-              <span className="font-bold text-gray-900 block">Verification Audit Ledger</span>
-              <div className="space-y-1.5 font-medium text-gray-600">
+            <div className="bg-white p-4 rounded-xl border border-natural-border shadow-xs text-left text-xs space-y-3">
+              <span className="font-bold text-natural-text uppercase tracking-wider text-[10px] block">Verification Audit Ledger</span>
+              <div className="space-y-1.5 font-semibold text-natural-muted">
                 <div className="flex justify-between">
                   <span>OTP Check:</span>
-                  <span className="text-green-700 font-bold">Passed</span>
+                  <span className="text-brand-600 font-black uppercase text-[10px]">Passed</span>
                 </div>
                 <div className="flex justify-between">
                   <span>GPS Radius Check:</span>
-                  <span className={verification.deliveryRadiusVerified ? 'text-green-700 font-bold' : 'text-amber-700'}>
+                  <span className={verification.deliveryRadiusVerified ? 'text-brand-600 font-black uppercase text-[10px]' : 'text-accent-600 uppercase text-[10px]'}>
                     {verification.deliveryRadiusVerified ? 'Radius Verified (< 250m)' : 'Flagged Anomaly (> 250m)'}
                   </span>
                 </div>
                 {verification.verificationConfidence && (
-                  <div className="flex justify-between border-t border-gray-100 pt-1.5 mt-1.5">
+                  <div className="flex justify-between border-t border-natural-border pt-1.5 mt-1.5">
                     <span>Audit Confidence:</span>
-                    <span className="font-extrabold text-gray-900">
+                    <span className="font-mono font-black text-natural-text text-sm">
                       {Math.round(verification.verificationConfidence * 100)}%
                     </span>
                   </div>
@@ -334,8 +402,9 @@ export const FoodDetailPage: React.FC = () => {
             </div>
           )}
         </div>
-
       </div>
     </div>
   );
 };
+
+export default FoodDetailPage;

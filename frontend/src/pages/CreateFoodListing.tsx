@@ -32,6 +32,10 @@ export const CreateFoodListing: React.FC = () => {
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
 
+  // Destination Zones states
+  const [zones, setZones] = useState<any[]>([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string>('');
+
   // Status handlers
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,13 +47,25 @@ export const CreateFoodListing: React.FC = () => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       const parsed = JSON.parse(storedUser);
-      // Wait, let's query the specific provider endpoints or fallback to cached values
       if (parsed && parsed.provider) {
         setPickupAddress(parsed.provider.address || '');
         setLatitude(parsed.provider.latitude || null);
         setLongitude(parsed.provider.longitude || null);
       }
     }
+
+    const fetchZones = async () => {
+      try {
+        const res = await axios.get('/api/v1/zones');
+        setZones(res.data || []);
+        if (res.data && res.data.length > 0) {
+          setSelectedZoneId(res.data[0].id);
+        }
+      } catch (e) {
+        console.error("Could not fetch active zones list", e);
+      }
+    };
+    fetchZones();
   }, []);
 
   const handleLocationSelect = (lat: number, lng: number) => {
@@ -74,6 +90,10 @@ export const CreateFoodListing: React.FC = () => {
       setError("Please select pickup coordinates on the map view.");
       return;
     }
+    if (!selectedZoneId) {
+      setError("Please select a target destination zone.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -92,6 +112,9 @@ export const CreateFoodListing: React.FC = () => {
         pickupAddress,
         pickupLatitude: latitude,
         pickupLongitude: longitude,
+        destinationZone: {
+          id: selectedZoneId
+        },
         status: 'AVAILABLE'
       };
 
@@ -103,6 +126,7 @@ export const CreateFoodListing: React.FC = () => {
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to publish surplus food details.');
     } finally {
+      // Done
       setLoading(false);
     }
   };
@@ -110,14 +134,14 @@ export const CreateFoodListing: React.FC = () => {
   if (success) {
     return (
       <div className="min-h-[50vh] flex flex-col justify-center items-center text-center space-y-4 max-w-md mx-auto">
-        <div className="w-16 h-16 rounded-full bg-brand-100 flex items-center justify-center text-brand-650">
-          <CheckCircle2 className="w-10 h-10" />
+        <div className="w-12 h-12 rounded-full bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-650">
+          <CheckCircle2 className="w-6 h-6" />
         </div>
-        <h2 className="text-xl font-display font-extrabold text-gray-900 tracking-tight">Surplus Donation Published</h2>
-        <p className="text-sm text-gray-500">
+        <h2 className="text-lg font-display font-black text-natural-text tracking-tight uppercase">Surplus Donation Published</h2>
+        <p className="text-xs text-natural-muted font-semibold leading-relaxed">
           Your donation has been published. We are finding a suitable route-compatible volunteer and routing options.
         </p>
-        <span className="text-xs text-brand-700 bg-brand-50 border border-brand-100 px-3 py-1 rounded-full animate-pulse">
+        <span className="text-[10px] text-brand-700 bg-brand-50 border border-brand-100 px-3.5 py-1 rounded-full animate-pulse font-bold uppercase tracking-wider">
           Redirecting to dashboard...
         </span>
       </div>
@@ -127,118 +151,116 @@ export const CreateFoodListing: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Back button */}
-      <div className="flex items-center">
+      <div className="flex items-center text-left">
         <button
           onClick={() => navigate('/provider/dashboard')}
-          className="flex items-center text-xs font-semibold text-gray-500 hover:text-gray-900 transition-colors gap-1.5"
+          className="inline-flex items-center text-[10px] font-bold text-brand-500 hover:text-brand-700 transition-colors gap-1 uppercase tracking-wider"
         >
-          <ArrowLeft className="w-5 h-5" /> Back to surplus ledger
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to surplus ledger
         </button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-xs p-6 md:p-8">
-        <div className="border-b border-gray-150 pb-5 mb-6">
-          <h2 className="text-xl font-display font-bold text-gray-900 tracking-tight">Declare Kitchen Surplus</h2>
-          <p className="text-xs text-gray-500 mt-1">Specify detailed food categories, allergens, and coordinate directions for pickups</p>
+      <div className="bg-white border border-natural-border rounded-2xl shadow-xs p-6 md:p-8">
+        <div className="border-b border-natural-border pb-5 mb-6 text-left">
+          <h2 className="text-xl font-display font-black text-natural-text tracking-tight uppercase">Declare Kitchen Surplus</h2>
+          <p className="text-xs text-natural-muted mt-1 font-semibold">Specify detailed food categories, allergens, and coordinate directions for pickups</p>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-650 flex items-start space-x-2">
-            <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-red-600" />
-            <span>{error}</span>
+          <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-650 flex items-start space-x-2 text-left">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-600" />
+            <span className="font-semibold">{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6 text-left">
           {/* Section 1: Food details */}
           <div className="space-y-4">
-            <h3 className="font-display font-semibold text-sm text-gray-900">1. Surplus Specifications</h3>
+            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">1. Surplus Specifications</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Surplus Food Name</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Food Description Name</label>
                 <input
                   type="text"
                   required
                   value={foodName}
                   onChange={(e) => setFoodName(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-[#faf9f6]/40 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  placeholder="E.g. Mixed Veg Curry & Roti"
+                  className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                  placeholder="E.g. Mixed Veg curry & parotas"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Category Tag</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Category Class</label>
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value as any)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
                 >
-                  <option value="VEG">VEG (Vegetarian)</option>
-                  <option value="NON-VEG">NON-VEG (Meat/Poultry)</option>
-                  <option value="EGG">EGG (Egg-based dishes)</option>
+                  <option value="VEG">Vegetarian (VEG)</option>
+                  <option value="NON_VEG">Non-Vegetarian (NON-VEG)</option>
                 </select>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Quantity Amount</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Meals Count Quantity</label>
                 <input
                   type="number"
                   required
                   min="1"
-                  step="any"
                   value={quantity || ''}
                   onChange={(e) => setQuantity(Number(e.target.value))}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-[#faf9f6]/40 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  placeholder="E.g. 35"
+                  className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                  placeholder="E.g. 25"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Measurement Unit</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Counting Unit</label>
                 <select
                   value={unit}
-                  onChange={(e) => setUnit(e.target.value as any)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  onChange={(e) => setUnit(e.target.value as 'MEALS' | 'KG')}
+                  className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
                 >
-                  <option value="MEALS">MEALS (Individual Portions)</option>
-                  <option value="KG">KG (Kilograms)</option>
+                  <option value="MEALS">MEALS</option>
+                  <option value="KG">KG</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Allergen Safety Notes</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Allergens Declared</label>
                 <input
                   type="text"
                   value={allergens}
                   onChange={(e) => setAllergens(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-[#faf9f6]/40 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                  placeholder="E.g. Wheat Gluten, Dairy (Optional)"
+                  className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                  placeholder="E.g. Nuts, Dairy (leave empty if none)"
                 />
               </div>
             </div>
           </div>
 
           {/* Section 2: Expiry & Safe Windows */}
-          <div className="space-y-4 pt-4 border-t border-gray-150">
-            <h3 className="font-display font-semibold text-sm text-gray-900">2. Consumption Safety Timers</h3>
+          <div className="space-y-4 pt-4 border-t border-natural-border">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">2. Consumption Safety Timers</h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Kitchen Preparation Time</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Kitchen Preparation Time</label>
                 <input
                   type="datetime-local"
                   required
                   value={prepTime}
                   onChange={(e) => setPrepTime(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-[#faf9f6]/40 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Safe Consumption Window (Hours)</label>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Safe Consumption Window (Hours)</label>
                 <input
                   type="number"
                   required
@@ -246,37 +268,58 @@ export const CreateFoodListing: React.FC = () => {
                   max="12"
                   value={safeConsumptionHrs || ''}
                   onChange={(e) => setSafeConsumptionHrs(Number(e.target.value))}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-[#faf9f6]/40 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
                   placeholder="E.g. 3 hours"
                 />
-                <span className="text-[10px] text-gray-400 mt-1 block">
+                <span className="text-[10px] text-natural-muted mt-1 block font-semibold">
                   Expiries trigger auto-removal bounds to avoid safety breaches.
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Section 3: GPS coords pick */}
-          <div className="space-y-4 pt-4 border-t border-gray-150">
-            <h3 className="font-display font-semibold text-sm text-gray-900">3. Pickup Geolocation coordinates</h3>
+          {/* Section 3: Target Community Zone */}
+          <div className="space-y-4 pt-4 border-t border-natural-border">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">3. Target Community Zone</h3>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Select Recipient Shelter / Redistribution Center</label>
+              <select
+                required
+                value={selectedZoneId}
+                onChange={(e) => setSelectedZoneId(e.target.value)}
+                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+              >
+                <option value="">-- Select Target Zone --</option>
+                {zones.map((zone) => (
+                  <option key={zone.id} value={zone.id}>
+                    {zone.name} — {zone.address} (Priority: {zone.priorityScore || 'Medium'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Section 4: GPS coords pick */}
+          <div className="space-y-4 pt-4 border-t border-natural-border">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">4. Pickup Geolocation</h3>
             
             <div>
-              <label className="block text-xs font-semibold text-gray-700">Pickup Street Address Description</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Pickup Street Address Description</label>
               <input
                 type="text"
                 required
                 value={pickupAddress}
                 onChange={(e) => setPickupAddress(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-[#faf9f6]/40 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
                 placeholder="Business suite, floor, street details"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-2">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted mb-2">
                 Pin Location on Map Canvas (click on target area)
               </label>
-              <div className="h-72 rounded-xl overflow-hidden border border-gray-250 relative">
+              <div className="h-64 rounded-xl overflow-hidden border border-natural-border relative">
                 <MapView
                   center={latitude !== null && longitude !== null ? [latitude, longitude] : [12.9716, 77.5946]}
                   zoom={12}
@@ -287,7 +330,7 @@ export const CreateFoodListing: React.FC = () => {
                 />
               </div>
               {latitude !== null && longitude !== null && (
-                <div className="text-[10px] text-right font-mono text-gray-500 mt-1">
+                <div className="text-[9px] text-right font-mono text-natural-muted mt-1.5 font-bold">
                   Latitude: {latitude.toFixed(5)} | Longitude: {longitude.toFixed(5)}
                 </div>
               )}
@@ -295,20 +338,20 @@ export const CreateFoodListing: React.FC = () => {
           </div>
 
           {/* Form Actions */}
-          <div className="flex justify-end space-x-3 pt-6 border-t border-gray-150">
+          <div className="flex justify-end space-x-3 pt-6 border-t border-natural-border">
             <button
               type="button"
               onClick={() => navigate('/provider/dashboard')}
-              className="px-5 py-2.5 border border-gray-250 bg-white hover:bg-gray-50 text-gray-700 font-semibold text-sm rounded-xl transition-all shadow-sm"
+              className="btn-secondary"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm px-6 py-2.5 rounded-xl transition-all shadow-sm flex items-center justify-center space-x-1.5 disabled:opacity-50"
+              className="btn-primary"
             >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Publish Listing'}
+              {loading ? 'Publishing...' : 'Publish Listing'}
             </button>
           </div>
         </form>

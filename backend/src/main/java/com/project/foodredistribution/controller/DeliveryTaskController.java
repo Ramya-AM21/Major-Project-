@@ -2,6 +2,7 @@ package com.project.foodredistribution.controller;
 
 import com.project.foodredistribution.dto.CreateTaskRequest;
 import com.project.foodredistribution.entity.DeliveryTask;
+import com.project.foodredistribution.entity.LocationTracking;
 import com.project.foodredistribution.service.DeliveryTaskService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -12,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/tasks")
+@RequestMapping({"/api/v1/tasks", "/api/delivery-tasks"})
 @CrossOrigin(origins = "*")
 public class DeliveryTaskController {
 
@@ -41,6 +42,13 @@ public class DeliveryTaskController {
         return ResponseEntity.ok(task);
     }
 
+    @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasRole('VOLUNTEER')")
+    public ResponseEntity<DeliveryTask> cancelTask(@PathVariable UUID id, Principal principal) {
+        DeliveryTask task = deliveryTaskService.cancelTask(id, principal.getName());
+        return ResponseEntity.ok(task);
+    }
+
     @GetMapping
     public ResponseEntity<List<DeliveryTask>> getAllTasks() {
         return ResponseEntity.ok(deliveryTaskService.getAllTasks());
@@ -66,5 +74,21 @@ public class DeliveryTaskController {
     @GetMapping("/zone/{zoneId}")
     public ResponseEntity<List<DeliveryTask>> getZoneTasks(@PathVariable UUID zoneId) {
         return ResponseEntity.ok(deliveryTaskService.getZoneTasks(zoneId));
+    }
+
+    @PostMapping("/{id}/location")
+    public ResponseEntity<DeliveryTask> updateLocation(@PathVariable UUID id, @RequestBody java.util.Map<String, Double> payload) {
+        Double latitude = payload.get("latitude");
+        Double longitude = payload.get("longitude");
+        if (latitude == null || longitude == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        DeliveryTask updated = deliveryTaskService.updateTaskLocation(id, latitude, longitude);
+        return ResponseEntity.ok(updated);
+    }
+
+    @GetMapping("/{id}/location")
+    public ResponseEntity<java.util.List<LocationTracking>> getLocationHistory(@PathVariable UUID id) {
+        return ResponseEntity.ok(deliveryTaskService.getTaskLocationHistory(id));
     }
 }

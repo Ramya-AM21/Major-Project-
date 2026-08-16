@@ -48,6 +48,31 @@ public class VerificationController {
         return ResponseEntity.ok(task);
     }
 
+    @PostMapping("/upload-proof")
+    public ResponseEntity<DeliveryTask> uploadProof(
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @RequestParam("taskId") UUID taskId,
+            @RequestParam("latitude") double latitude,
+            @RequestParam("longitude") double longitude) {
+        
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("Uploaded file cannot be empty");
+        }
+        
+        try {
+            byte[] bytes = file.getBytes();
+            String filename = file.getOriginalFilename();
+            if (filename == null) {
+                filename = "proof.png";
+            }
+            
+            DeliveryTask task = deliveryTaskService.processDeliveryProof(taskId, bytes, filename, latitude, longitude);
+            return ResponseEntity.ok(task);
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("Failed to read uploaded photo bytes", e);
+        }
+    }
+
     @GetMapping("/task/{taskId}")
     public ResponseEntity<Verification> getVerificationByTaskId(@PathVariable UUID taskId) {
         Verification verification = verificationRepository.findByTaskId(taskId)

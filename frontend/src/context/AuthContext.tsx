@@ -51,7 +51,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string) => {
     try {
       const response = await axios.post('/api/v1/auth/login', { email, password });
-      const { token, user: loggedUser } = response.data;
+      const { token, userId, name, role, email: returnedEmail } = response.data;
+      const loggedUser: User = { 
+        id: userId, 
+        name, 
+        email: returnedEmail || email, 
+        role, 
+        phoneNumber: response.data.phone || '' 
+      };
 
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(loggedUser));
@@ -69,7 +76,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (payload: any) => {
     try {
       const response = await axios.post('/api/v1/auth/register', payload);
-      const { token, user: loggedUser } = response.data;
+      const { token, userId, name, role, email: returnedEmail } = response.data;
+      const loggedUser: User = { 
+        id: userId, 
+        name, 
+        email: returnedEmail || payload.email, 
+        role, 
+        phoneNumber: response.data.phone || payload.phone || '' 
+      };
 
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(loggedUser));

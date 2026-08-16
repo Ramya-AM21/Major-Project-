@@ -35,6 +35,12 @@ public class DeliveryTask {
 
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    private Double currentLatitude;
+
+    private Double currentLongitude;
+
+    private LocalDateTime lastLocationUpdate;
+
     public DeliveryTask() {
     }
 
@@ -65,4 +71,13 @@ public class DeliveryTask {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public Double getCurrentLatitude() { return currentLatitude; }
+    public void setCurrentLatitude(Double currentLatitude) { this.currentLatitude = currentLatitude; }
+
+    public Double getCurrentLongitude() { return currentLongitude; }
+    public void setCurrentLongitude(Double currentLongitude) { this.currentLongitude = currentLongitude; }
+
+    public LocalDateTime getLastLocationUpdate() { return lastLocationUpdate; }
+    public void setLastLocationUpdate(LocalDateTime lastLocationUpdate) { this.lastLocationUpdate = lastLocationUpdate; }
 }

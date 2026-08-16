@@ -4,27 +4,34 @@
 
 @layer base {
   body {
-    @apply bg-[#FAF9F6] text-gray-800 font-sans antialiased;
+    @apply bg-natural-bg text-natural-text font-sans antialiased;
+    background-image: 
+      radial-gradient(circle at 0% 0%, rgba(122, 164, 143, 0.08) 0%, transparent 35%),
+      radial-gradient(circle at 100% 100%, rgba(122, 164, 143, 0.07) 0%, transparent 40%),
+      radial-gradient(circle at 50% 50%, rgba(223, 140, 56, 0.02) 0%, transparent 50%);
+    background-attachment: fixed;
   }
   
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display font-semibold tracking-tight;
+    @apply font-display font-semibold tracking-tight text-natural-text;
   }
 }
 
-/* Custom scrollbars for operational data grids */
+/* Reusable organic background pattern */
+.organic-pattern {
+  background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 80 C 40 40, 60 40, 80 0' stroke='rgba(36, 79, 60, 0.02)' stroke-width='1.5' fill='none' stroke-dasharray='4,4'/%3E%3Cpath d='M0 50 C 30 20, 50 30, 80 20' stroke='rgba(122, 164, 143, 0.03)' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+}
+
+/* Custom organic-styled scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded;
-}
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400;
+  @apply bg-brand-200 rounded-full hover:bg-brand-300 transition-colors;
 }
 
 /* Fix leaflet map sizing */
@@ -34,7 +41,20 @@
   z-index: 1;
 }
 
-/* Operational loader styles */
+/* Loader style */
 .skeleton {
-  @apply animate-pulse bg-gray-200 rounded;
+  @apply animate-pulse bg-brand-100 rounded-md;
+}
+
+/* Premium Component Utilities */
+.premium-card {
+  @apply bg-white border border-natural-border rounded-xl shadow-sm transition-all duration-200 hover:shadow-md hover:border-brand-200;
+}
+
+.btn-primary {
+  @apply bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs px-4 py-2.5 rounded-lg transition-all uppercase tracking-wider shadow-sm hover:shadow-md active:translate-y-px disabled:opacity-50 disabled:pointer-events-none;
+}
+
+.btn-secondary {
+  @apply bg-white hover:bg-brand-50 text-brand-600 border border-brand-200 font-bold text-xs px-4 py-2.5 rounded-lg transition-all uppercase tracking-wider shadow-sm hover:shadow-md active:translate-y-px disabled:opacity-50 disabled:pointer-events-none;
 }

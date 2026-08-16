@@ -25,16 +25,22 @@ public class MatchingService {
     }
 
     public double calculateRouteDeviation(VolunteerRoute route, FoodListing food, Zone zone) {
+        double startLat = (route.getCurrentLatitude() != null) ? route.getCurrentLatitude() : route.getStartLatitude();
+        double startLng = (route.getCurrentLongitude() != null) ? route.getCurrentLongitude() : route.getStartLongitude();
+
+        double destLat = (food.getDestinationLatitude() != null) ? food.getDestinationLatitude() : (zone != null ? zone.getLatitude() : route.getEndLatitude());
+        double destLng = (food.getDestinationLongitude() != null) ? food.getDestinationLongitude() : (zone != null ? zone.getLongitude() : route.getEndLongitude());
+
         // Direct travel distance for volunteer
-        double dDirect = calculateDistance(route.getStartLatitude(), route.getStartLongitude(),
+        double dDirect = calculateDistance(startLat, startLng,
                 route.getEndLatitude(), route.getEndLongitude());
 
-        // Deviated travel distance (Start -> Pickup -> Delivery -> End)
-        double d1 = calculateDistance(route.getStartLatitude(), route.getStartLongitude(),
+        // Deviated travel distance (Start/Current -> Pickup -> Delivery/Zone -> End)
+        double d1 = calculateDistance(startLat, startLng,
                 food.getPickupLatitude(), food.getPickupLongitude());
         double d2 = calculateDistance(food.getPickupLatitude(), food.getPickupLongitude(),
-                zone.getLatitude(), zone.getLongitude());
-        double d3 = calculateDistance(zone.getLatitude(), zone.getLongitude(),
+                destLat, destLng);
+        double d3 = calculateDistance(destLat, destLng,
                 route.getEndLatitude(), route.getEndLongitude());
 
         double dDeviated = d1 + d2 + d3;

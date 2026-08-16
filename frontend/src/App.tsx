@@ -9,6 +9,8 @@ import { CreateFoodListing } from './pages/CreateFoodListing';
 import { FoodDetailPage } from './pages/FoodDetailPage';
 import { VolunteerDashboard } from './pages/VolunteerDashboard';
 import { VolunteerRoutes } from './pages/VolunteerRoutes';
+import { VolunteerRewards } from './pages/VolunteerRewards';
+import { FindMatchingFood } from './pages/FindMatchingFood';
 import { AdminDashboard } from './pages/AdminDashboard';
 
 // Protected Route Wrapper to enforce JWT and Role based permissions
@@ -102,11 +104,41 @@ export const App: React.FC = () => {
             } 
           />
           <Route 
+            path="/volunteer/tasks" 
+            element={
+              <ProtectedRoute allowedRoles={['VOLUNTEER']}>
+                <DashboardLayout>
+                  <VolunteerDashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
             path="/volunteer/routes" 
             element={
               <ProtectedRoute allowedRoles={['VOLUNTEER']}>
                 <DashboardLayout>
                   <VolunteerRoutes />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/volunteer/rewards" 
+            element={
+              <ProtectedRoute allowedRoles={['VOLUNTEER']}>
+                <DashboardLayout>
+                  <VolunteerRewards />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/volunteer/matching" 
+            element={
+              <ProtectedRoute allowedRoles={['VOLUNTEER']}>
+                <DashboardLayout>
+                  <FindMatchingFood />
                 </DashboardLayout>
               </ProtectedRoute>
             } 

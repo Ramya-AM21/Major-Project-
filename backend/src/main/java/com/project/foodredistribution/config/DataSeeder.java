@@ -6,6 +6,8 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +25,7 @@ public class DataSeeder implements CommandLineRunner {
     private final DeliveryTaskRepository deliveryTaskRepository;
     private final VerificationRepository verificationRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RestaurantRewardRepository restaurantRewardRepository;
 
     public DataSeeder(UserRepository userRepository,
                       FoodProviderRepository foodProviderRepository,
@@ -32,7 +35,8 @@ public class DataSeeder implements CommandLineRunner {
                       VolunteerRouteRepository volunteerRouteRepository,
                       DeliveryTaskRepository deliveryTaskRepository,
                       VerificationRepository verificationRepository,
-                      PasswordEncoder passwordEncoder) {
+                      PasswordEncoder passwordEncoder,
+                      RestaurantRewardRepository restaurantRewardRepository) {
         this.userRepository = userRepository;
         this.foodProviderRepository = foodProviderRepository;
         this.volunteerRepository = volunteerRepository;
@@ -42,9 +46,11 @@ public class DataSeeder implements CommandLineRunner {
         this.deliveryTaskRepository = deliveryTaskRepository;
         this.verificationRepository = verificationRepository;
         this.passwordEncoder = passwordEncoder;
+        this.restaurantRewardRepository = restaurantRewardRepository;
     }
 
     @Override
+    @Transactional
     public void run(String... args) throws Exception {
         if (userRepository.count() > 0) {
             return; // Already seeded
@@ -185,7 +191,7 @@ public class DataSeeder implements CommandLineRunner {
         fl1.setStatus("AVAILABLE");
         foodListingRepository.save(fl1);
 
-        // Listing 2: MATCHED
+        // Listing 2: MATCHED (now AVAILABLE)
         FoodListing fl2 = new FoodListing();
         fl2.setProvider(p1);
         fl2.setFoodName("Paneer Pulav");
@@ -199,18 +205,18 @@ public class DataSeeder implements CommandLineRunner {
         fl2.setPickupAddress(p1.getAddress());
         fl2.setPickupLatitude(p1.getLatitude());
         fl2.setPickupLongitude(p1.getLongitude());
-        fl2.setStatus("MATCHED");
+        fl2.setStatus("AVAILABLE");
         foodListingRepository.save(fl2);
 
         // Task 1: Proposed/Created for Paneer Pulav -> Malleswaram Zone (Matches Rahul's route)
         DeliveryTask t1 = new DeliveryTask();
         t1.setFoodListing(fl2);
-        t1.setVolunteer(v1); // Assigned to Rahul
+        t1.setVolunteer(null); // Unassigned so Rahul can choose it in real-time
         t1.setZone(z1);
         t1.setRouteDistance(4.8);
         t1.setRouteDeviation(1.2);
         t1.setMatchingScore(91.0);
-        t1.setStatus("ACCEPTED"); // ACCEPTED
+        t1.setStatus("CREATED"); // Proposed CREATED state
         deliveryTaskRepository.save(t1);
 
         Verification vRec1 = new Verification();
@@ -274,5 +280,13 @@ public class DataSeeder implements CommandLineRunner {
         fl4.setPickupLongitude(p1.getLongitude());
         fl4.setStatus("EXPIRED");
         foodListingRepository.save(fl4);
+
+        // 7. Seed Restaurant Rewards Catalog
+        if (restaurantRewardRepository.count() == 0) {
+            restaurantRewardRepository.save(new RestaurantReward("Green Bowl Kitchen", "15% discount on Veg Mains", 100, 15, LocalDateTime.now().plusMonths(3)));
+            restaurantRewardRepository.save(new RestaurantReward("Urban Harvest Cafe", "Free Cappuccino with any sandwich", 75, 100, LocalDateTime.now().plusMonths(3)));
+            restaurantRewardRepository.save(new RestaurantReward("City Bites", "10% off on all prepared combos", 50, 10, LocalDateTime.now().plusMonths(3)));
+            restaurantRewardRepository.save(new RestaurantReward("Fresh Route Express", "25% discount voucher", 150, 25, LocalDateTime.now().plusMonths(3)));
+        }
     }
 }

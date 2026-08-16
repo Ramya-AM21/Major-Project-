@@ -84,4 +84,51 @@ public class AiIntegrationService {
         fallback.put("source", "Baseline System Security (AI Offline Fallback)");
         return fallback;
     }
+
+    public Map<String, Object> validateDeliveryProof(UUID taskId, byte[] imageBytes, String filename, double latitude, double longitude) {
+        try {
+            String url = aiServiceUrl + "/validate/delivery-proof";
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA);
+
+            org.springframework.util.LinkedMultiValueMap<String, Object> body = new org.springframework.util.LinkedMultiValueMap<>();
+            
+            org.springframework.core.io.ByteArrayResource fileResource = new org.springframework.core.io.ByteArrayResource(imageBytes) {
+                @Override
+                public String getFilename() {
+                    return filename;
+                }
+            };
+            
+            body.add("image", fileResource);
+            body.add("taskId", taskId.toString());
+            body.add("latitude", String.valueOf(latitude));
+            body.add("longitude", String.valueOf(longitude));
+
+            org.springframework.http.HttpEntity<org.springframework.util.LinkedMultiValueMap<String, Object>> requestEntity =
+                    new org.springframework.http.HttpEntity<>(body, headers);
+
+            ResponseEntity<Map> response = restTemplate.postForEntity(url, requestEntity, Map.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> res = (Map<String, Object>) response.getBody();
+                res.put("source", "Python FastAPI - Validate Proof");
+                return res;
+            }
+        } catch (Exception ex) {
+            log.warn("FastAPI ML proof-validation service unavailable: {}. Falling back to baseline simulation.", ex.getMessage());
+        }
+
+        // Fallback: if offline, return normal logic but log it
+        Map<String, Object> fallback = new HashMap<>();
+        boolean valid = true;
+        if (filename.toLowerCase().contains("fake") || filename.toLowerCase().contains("cheat")) {
+            valid = false;
+        }
+        fallback.put("valid", valid);
+        fallback.put("confidence", 0.88);
+        fallback.put("anomalyScore", 0.05);
+        fallback.put("reason", valid ? "Local validation fallback (AI offline)" : "Suspicious metadata or filename signature");
+        fallback.put("source", "Baseline System Security (AI Offline Fallback)");
+        return fallback;
+    }
 }

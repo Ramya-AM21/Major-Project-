@@ -6,6 +6,7 @@ public class VolunteerAnalyticsDto {
     private int successfulDeliveries;
     private double reliabilityScore;
     private double mealsDelivered;
+    private int tokens;
 
     public VolunteerAnalyticsDto() {
     }
@@ -25,4 +26,7 @@ public class VolunteerAnalyticsDto {
 
     public double getMealsDelivered() { return mealsDelivered; }
     public void setMealsDelivered(double mealsDelivered) { this.mealsDelivered = mealsDelivered; }
+
+    public int getTokens() { return tokens; }
+    public void setTokens(int tokens) { this.tokens = tokens; }
 }

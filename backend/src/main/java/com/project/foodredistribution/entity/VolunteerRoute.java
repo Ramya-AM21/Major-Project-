@@ -40,6 +40,20 @@ public class VolunteerRoute {
 
     private String activeUntil = "09:00 AM";
 
+    private Double maxDeviation = 5.0; // default 5km
+
+    private java.time.LocalDateTime startTime;
+
+    private java.time.LocalDateTime expectedEndTime;
+
+    private String status = "ACTIVE"; // ACTIVE, COMPLETED, CANCELLED
+
+    private Double currentLatitude;
+
+    private Double currentLongitude;
+
+    private java.time.LocalDateTime lastLocationUpdate;
+
     public VolunteerRoute() {
     }
 
@@ -79,4 +93,25 @@ public class VolunteerRoute {
 
     public String getActiveUntil() { return activeUntil; }
     public void setActiveUntil(String activeUntil) { this.activeUntil = activeUntil; }
+
+    public Double getMaxDeviation() { return maxDeviation; }
+    public void setMaxDeviation(Double maxDeviation) { this.maxDeviation = maxDeviation; }
+
+    public java.time.LocalDateTime getStartTime() { return startTime; }
+    public void setStartTime(java.time.LocalDateTime startTime) { this.startTime = startTime; }
+
+    public java.time.LocalDateTime getExpectedEndTime() { return expectedEndTime; }
+    public void setExpectedEndTime(java.time.LocalDateTime expectedEndTime) { this.expectedEndTime = expectedEndTime; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public Double getCurrentLatitude() { return currentLatitude; }
+    public void setCurrentLatitude(Double currentLatitude) { this.currentLatitude = currentLatitude; }
+
+    public Double getCurrentLongitude() { return currentLongitude; }
+    public void setCurrentLongitude(Double currentLongitude) { this.currentLongitude = currentLongitude; }
+
+    public java.time.LocalDateTime getLastLocationUpdate() { return lastLocationUpdate; }
+    public void setLastLocationUpdate(java.time.LocalDateTime lastLocationUpdate) { this.lastLocationUpdate = lastLocationUpdate; }
 }

@@ -16,6 +16,7 @@ interface VolunteerRoute {
   routeType: string;
   activeFrom: string;
   activeUntil: string;
+  maxDeviation?: number;
 }
 
 export const VolunteerRoutes: React.FC = () => {
@@ -34,6 +35,7 @@ export const VolunteerRoutes: React.FC = () => {
   const [routeType, setRouteType] = useState<'DAILY' | 'AD_HOC'>('DAILY');
   const [activeFrom, setActiveFrom] = useState('08:00 AM');
   const [activeUntil, setActiveUntil] = useState('09:00 AM');
+  const [maxDeviation, setMaxDeviation] = useState<number>(5.0);
   
   // Which marker is currently selected (for coordinates input helper)
   const [pickingLocation, setPickingLocation] = useState<'START' | 'END' | null>(null);
@@ -95,7 +97,8 @@ export const VolunteerRoutes: React.FC = () => {
         routeGeometry: `${startLat},${startLng};${endLat},${endLng}`,
         routeType,
         activeFrom,
-        activeUntil
+        activeUntil,
+        maxDeviation
       };
 
       await axios.post('/api/v1/volunteers/routes', payload);
@@ -107,6 +110,7 @@ export const VolunteerRoutes: React.FC = () => {
       setStartLng(null);
       setEndLat(null);
       setEndLng(null);
+      setMaxDeviation(5.0);
 
       fetchRoutesList();
     } catch (err: any) {
@@ -143,81 +147,81 @@ export const VolunteerRoutes: React.FC = () => {
   ] : [];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-left max-w-5xl mx-auto">
       
       {/* List / Register form */}
       <div className="lg:col-span-6 space-y-6">
-        <div>
-          <h2 className="text-xl font-display font-bold text-gray-901 tracking-tight">Configure Commute Routes</h2>
-          <p className="text-xs text-gray-500 mt-1">Specify usual routes so we can query suitable surplus pick offers on your path</p>
+        <div className="border-b border-natural-border pb-5">
+          <h2 className="text-xl font-display font-black text-natural-text tracking-tight uppercase">Configure Commute Routes</h2>
+          <p className="text-xs text-natural-muted mt-1 font-semibold">Specify usual routes so we can query suitable surplus pick offers on your path</p>
         </div>
 
         {errorText && (
-          <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-650 flex items-start space-x-2">
-            <AlertCircle className="w-5 h-5 shrink-0 text-red-600 mt-0.5" />
+          <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-750 flex items-start space-x-2 font-semibold">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-650 mt-0.5" />
             <span>{errorText}</span>
           </div>
         )}
 
         {/* Input Form */}
-        <form onSubmit={handleRegisterRoute} className="bg-white border border-gray-200 p-5 rounded-2xl shadow-xs space-y-4">
-          <h3 className="font-semibold text-xs text-gray-900 border-b border-gray-100 pb-2">Add Commute Pathway</h3>
+        <form onSubmit={handleRegisterRoute} className="bg-white border border-natural-border p-5 rounded-2xl shadow-xs space-y-4">
+          <h3 className="font-bold text-xs text-natural-text border-b border-natural-border pb-2 uppercase tracking-wider">Add Commute Pathway</h3>
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-semibold text-gray-700">Origin Name</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Origin Name</label>
               <input
                 type="text"
                 required
                 value={startName}
                 onChange={(e) => setStartName(e.target.value)}
-                className="mt-1 block w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-[#faf9f6]/40 focus:outline-none"
+                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
                 placeholder="E.g. Home"
               />
               <button
                 type="button"
                 onClick={() => setPickingLocation('START')}
-                className={`mt-1.5 w-full text-center text-[10px] py-1 border rounded font-semibold transition-all ${
+                className={`mt-2 w-full text-center text-[9px] py-1.5 border rounded-lg font-black transition-all uppercase tracking-wider ${
                   pickingLocation === 'START'
-                    ? 'border-brand-500 bg-brand-50 text-brand-700 font-bold'
-                    : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                    ? 'border-brand-600 bg-brand-100 text-brand-700'
+                    : 'border-gray-200 bg-gray-50 text-natural-muted hover:bg-gray-100'
                 }`}
               >
-                {startLat ? 'Origin Coordinates set ✓' : 'Pin Origin start coordinates'}
+                {startLat ? 'Origin Coordinates set ✓' : 'Pin Origin'}
               </button>
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-gray-700">Destination Name</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Destination Name</label>
               <input
                 type="text"
                 required
                 value={endName}
                 onChange={(e) => setEndName(e.target.value)}
-                className="mt-1 block w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-[#faf9f6]/40 focus:outline-none"
+                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
                 placeholder="E.g. College"
               />
               <button
                 type="button"
                 onClick={() => setPickingLocation('END')}
-                className={`mt-1.5 w-full text-center text-[10px] py-1 border rounded font-semibold transition-all ${
+                className={`mt-2 w-full text-center text-[9px] py-1.5 border rounded-lg font-black transition-all uppercase tracking-wider ${
                   pickingLocation === 'END'
-                    ? 'border-brand-500 bg-brand-50 text-brand-700 font-bold'
-                    : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                    ? 'border-brand-600 bg-brand-100 text-brand-700'
+                    : 'border-gray-200 bg-gray-50 text-natural-muted hover:bg-gray-100'
                 }`}
               >
-                {endLat ? 'Destination coordinates set ✓' : 'Pin Destination coordinates'}
+                {endLat ? 'Destination set ✓' : 'Pin Destination'}
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="block text-[10px] font-semibold text-gray-700">Transit Mode</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Transit Mode</label>
               <select
                 value={routeType}
                 onChange={(e) => setRouteType(e.target.value as any)}
-                className="mt-1 block w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none"
+                className="mt-1.5 block w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
               >
                 <option value="DAILY">DAILY</option>
                 <option value="AD_HOC">AD HOC (One Time)</option>
@@ -225,63 +229,79 @@ export const VolunteerRoutes: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-gray-700">Start Time</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Start Time</label>
               <input
                 type="text"
                 required
                 value={activeFrom}
                 onChange={(e) => setActiveFrom(e.target.value)}
-                className="mt-1 block w-full px-2 py-1 border border-gray-300 rounded-lg text-xs bg-[#faf9f6]/40"
+                className="mt-1.5 block w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
                 placeholder="09:00 AM"
               />
             </div>
 
             <div>
-              <label className="block text-[10px] font-semibold text-gray-700">End Time</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">End Time</label>
               <input
                 type="text"
                 required
                 value={activeUntil}
                 onChange={(e) => setActiveUntil(e.target.value)}
-                className="mt-1 block w-full px-2 py-1 border border-gray-300 rounded-lg text-xs bg-[#faf9f6]/40"
+                className="mt-1.5 block w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
                 placeholder="10:00 AM"
               />
             </div>
           </div>
 
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted flex justify-between">
+              <span>Maximum acceptable route deviation</span>
+              <span className="font-mono text-brand-650 font-black">{maxDeviation} km</span>
+            </label>
+            <input
+              type="range"
+              min="0.5"
+              max="15.0"
+              step="0.5"
+              value={maxDeviation}
+              onChange={(e) => setMaxDeviation(Number(e.target.value))}
+              className="mt-1.5 w-full accent-brand-600 cursor-pointer"
+            />
+          </div>
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center py-2 px-4 rounded-xl text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 focus:outline-none shadow-sm transition-colors"
+            className="btn-primary w-full flex justify-center"
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Register Travel Route'}
+            {loading ? 'Registering...' : 'Register Travel Route'}
           </button>
         </form>
 
         {/* List of registered ones */}
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-gray-150">
-            <h3 className="font-semibold text-xs text-gray-901">Registered Commutes</h3>
+        <div className="bg-white border border-natural-border rounded-2xl shadow-xs overflow-hidden">
+          <div className="p-4 border-b border-natural-border bg-[#FAF9F5]">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Registered Commutes</h3>
           </div>
           {routes.length === 0 ? (
-            <div className="p-8 text-center text-xs text-gray-500">
+            <div className="p-8 text-center text-xs text-natural-muted font-semibold">
               No registered commute routes found. Use the map to declare commutes.
             </div>
           ) : (
-            <div className="divide-y divide-gray-150">
+            <div className="divide-y divide-natural-border">
               {routes.map((rt) => (
-                <div key={rt.id} className="p-4 hover:bg-[#FAF9F6]/20 transition-colors flex items-center justify-between text-xs">
+                <div key={rt.id} className="p-4 hover:bg-[#FAF9F5] transition-colors flex items-center justify-between text-xs">
                   <div>
-                    <h5 className="font-semibold text-gray-900">{rt.startName} ➔ {rt.endName}</h5>
-                    <div className="text-[10px] text-gray-400 mt-1 flex space-x-2 font-medium">
-                      <span>{rt.routeType}</span>
-                      <span>•</span>
-                      <span>{rt.activeFrom} - {rt.activeUntil}</span>
+                    <h5 className="font-bold text-natural-text uppercase tracking-wider">{rt.startName} ➔ {rt.endName}</h5>
+                    <div className="text-[9px] text-natural-muted mt-1.5 flex flex-wrap gap-2 font-bold uppercase tracking-wider">
+                      <span className="bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-mono font-extrabold">{rt.routeType}</span>
+                      <span className="bg-brand-100 text-brand-850 px-1.5 py-0.5 rounded font-mono font-extrabold">{rt.activeFrom} - {rt.activeUntil}</span>
+                      <span className="bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5 rounded font-mono font-extrabold">Detour: {rt.maxDeviation || 5.0} km</span>
                     </div>
                   </div>
                   <button
                     onClick={() => handleDeleteRoute(rt.id)}
-                    className="p-1 text-red-505 hover:bg-red-50 text-red-600 rounded transition-colors"
+                    className="p-1.5 text-red-500 hover:bg-red-50 hover:text-red-700 rounded-lg transition-colors border border-transparent hover:border-red-100 bg-white"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -295,15 +315,15 @@ export const VolunteerRoutes: React.FC = () => {
 
       {/* Map selector pane */}
       <div className="lg:col-span-6 flex flex-col min-h-[400px]">
-        <div className="p-3 bg-brand-50 border border-brand-100 rounded-xl mb-4 text-xs font-medium text-brand-850 flex items-start space-x-2">
-          <AlertCircle className="w-4 h-4 shrink-0 text-brand-650 mt-0.5" />
+        <div className="p-3 bg-brand-50 border border-brand-100 rounded-xl mb-4 text-xs font-semibold text-brand-850 flex items-start space-x-2 text-left">
+          <AlertCircle className="w-4 h-4 shrink-0 text-brand-750 mt-0.5" />
           <span>
             {pickingLocation 
               ? `Move cursor to your ${pickingLocation} target on the map canvas and click to set coordinates.`
               : 'Commute drawing: Click starting/ending hooks inside coordinates pickers to set travel bounds.'}
           </span>
         </div>
-        <div className="flex-1 min-h-[350px] relative overflow-hidden rounded-2xl border border-gray-200">
+        <div className="flex-1 min-h-[350px] relative overflow-hidden rounded-2xl border border-natural-border">
           <MapView
             center={[12.9716, 77.5946]}
             zoom={12}
@@ -317,4 +337,5 @@ export const VolunteerRoutes: React.FC = () => {
     </div>
   );
 };
+
 export default VolunteerRoutes;
