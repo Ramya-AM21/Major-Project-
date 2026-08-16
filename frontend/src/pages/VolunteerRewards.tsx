@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Award, CheckCircle, Tag, Clock, AlertTriangle, AlertCircle, Sparkles } from 'lucide-react';
+import { Award, CheckCircle, Tag, Clock, AlertTriangle, AlertCircle, Sparkles, Receipt, Percent } from 'lucide-react';
 import axios from 'axios';
+import communityRewardImg from '../assets/community_reward.png';
 
 interface RestaurantReward {
   id: string;
@@ -69,7 +70,6 @@ export const VolunteerRewards: React.FC = () => {
       setErrorText(null);
       const res = await axios.post(`/api/v1/rewards/${reward.id}/redeem`);
       setSuccessRedemption(res.data);
-      // Reload wallet balance and redemptions history
       loadRewardsData();
     } catch (err: any) {
       setErrorText(err.response?.data?.message || "Failed to process reward redemption.");
@@ -78,18 +78,19 @@ export const VolunteerRewards: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
+      
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-left border-b border-natural-border pb-5">
         <div>
-          <h1 className="text-xl font-display font-black text-natural-text tracking-tight flex items-center gap-2 uppercase">
-            <Sparkles className="w-5 h-5 text-accent-500 fill-accent-500" /> Kitchen Partner Coupons
+          <h1 className="text-2xl font-display font-black text-natural-text tracking-tight flex items-center gap-2 uppercase">
+            <Sparkles className="w-6 h-6 text-accent-500 fill-accent-500 shrink-0" /> Kitchen Partner Coupons
           </h1>
-          <p className="text-xs text-natural-muted mt-1 font-semibold">Exchange your verified delivery tokens for discount coupon codes at local restaurants</p>
+          <p className="text-xs text-natural-muted mt-0.5 font-semibold">Exchange your verified delivery tokens for discount coupon codes at local restaurants</p>
         </div>
 
-        {/* Balance card */}
-        <div className="bg-white border border-natural-border py-2 px-4 rounded-xl flex items-center space-x-3 text-left shadow-xs self-start sm:self-auto">
-          <div className="w-8 h-8 rounded bg-accent-50/50 border border-accent-100 flex items-center justify-center font-bold text-base text-accent-700">🪙</div>
+        {/* Balance Card styled like Shopify metrics */}
+        <div className="bg-white border border-natural-border py-2 px-4 rounded-xl flex items-center space-x-3 text-left shadow-xs self-start sm:self-auto min-w-[170px]">
+          <div className="w-10 h-10 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center font-bold text-xl text-brand-700">🪙</div>
           <div>
             <span className="text-[9px] uppercase font-black text-natural-muted block leading-none">Wallet Balance</span>
             <span className="text-xs font-mono font-black text-natural-text mt-1.5 block leading-none">{walletBalance} points</span>
@@ -97,8 +98,20 @@ export const VolunteerRewards: React.FC = () => {
         </div>
       </div>
 
+      <div className="bg-white border border-natural-border p-4 rounded-2xl flex items-center space-x-4 shadow-xs">
+        <div className="flex-1 text-left">
+          <h3 className="font-display font-black text-xs uppercase tracking-wider text-natural-text">Eco-Contribution Rewards</h3>
+          <p className="text-[10px] text-natural-muted leading-relaxed font-semibold mt-1">
+            Redeem your accrued tokens for coupon vouchers at partner dining spots. Each point reflects CO2 offset savings and organic food rescued along commutes.
+          </p>
+        </div>
+        <div className="w-20 h-20 shrink-0 rounded-xl bg-brand-50/50 border border-brand-150 overflow-hidden flex items-center justify-center p-1.5">
+          <img src={communityRewardImg} alt="Community Reward Illustration" className="w-full h-full object-contain rounded-lg" />
+        </div>
+      </div>
+
       {errorText && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-750 flex items-start space-x-2 text-left font-semibold">
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-750 flex items-start space-x-2.5 text-left font-semibold">
           <AlertCircle className="w-4 h-4 shrink-0 text-red-650 mt-0.5" />
           <span>{errorText}</span>
         </div>
@@ -106,20 +119,20 @@ export const VolunteerRewards: React.FC = () => {
 
       {/* Success Modal/Notice when redeemed */}
       {successRedemption && (
-        <div className="p-5 rounded-2xl bg-brand-50 border border-brand-100 text-left space-y-3 relative overflow-hidden transition-all shadow-xs">
-          <div className="flex items-center space-x-2 text-brand-700 font-bold">
-            <CheckCircle className="w-5 h-5" />
+        <div className="p-5 rounded-2xl bg-brand-50 border border-brand-100 text-left space-y-3.5 relative overflow-hidden transition-all shadow-xs animate-in slide-in-from-top-4 duration-200">
+          <div className="flex items-center space-x-2 text-brand-750 font-bold">
+            <CheckCircle className="w-5 h-5 shrink-0" />
             <h3 className="text-xs font-display uppercase tracking-wider">Coupon Redeemed Successfully!</h3>
           </div>
           <p className="text-xs text-brand-650 font-semibold leading-relaxed">
-            Your discount voucher for <strong>{successRedemption.restaurantReward.restaurantName}</strong> has been generated. Use the code below at checkout.
+            Your discount voucher for <strong>{successRedemption.restaurantReward.restaurantName}</strong> has been generated. Provide the code below at checkout.
           </p>
           <div className="p-4 bg-white border border-brand-200 rounded-xl max-w-sm flex items-center justify-between shadow-xs">
             <div>
-              <span className="text-[10px] text-natural-muted block font-normal uppercase tracking-wider">Discount Code</span>
-              <strong className="text-xl font-mono text-natural-text tracking-wider">{successRedemption.redemptionCode}</strong>
+              <span className="text-[9px] text-natural-muted block font-bold uppercase tracking-wider">Discount Code</span>
+              <strong className="text-xl font-mono text-natural-text tracking-widest">{successRedemption.redemptionCode}</strong>
             </div>
-            <span className="text-xs font-bold text-brand-700 bg-brand-50 border border-brand-100 px-3 py-1 rounded-lg uppercase">
+            <span className="text-xs font-bold text-brand-700 bg-brand-50 border border-brand-100 px-3 py-1.5 rounded-lg uppercase font-mono">
               {successRedemption.restaurantReward.discountPercentage}% OFF
             </span>
           </div>
@@ -133,9 +146,9 @@ export const VolunteerRewards: React.FC = () => {
       )}
 
       {loading ? (
-        <div className="p-12 text-center text-natural-muted flex flex-col items-center justify-center space-y-2">
-          <div className="w-7 h-7 rounded-full border-4 border-brand-200 border-t-brand-650 animate-spin"></div>
-          <span className="text-xs font-semibold">Loading catalog...</span>
+        <div className="p-12 text-center text-natural-muted flex flex-col items-center justify-center space-y-2.5 bg-white rounded-xl border border-natural-border shadow-xs">
+          <div className="w-7 h-7 rounded-full border-3 border-brand-200 border-t-brand-600 animate-spin"></div>
+          <span className="text-xs font-semibold">Loading partner catalog...</span>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -147,26 +160,30 @@ export const VolunteerRewards: React.FC = () => {
               {catalog.map((itm) => {
                 const canAfford = walletBalance >= itm.requiredCoins;
                 return (
-                  <div key={itm.id} className="bg-white border border-natural-border rounded-2xl p-5 shadow-xs text-left flex flex-col justify-between space-y-5 hover:border-brand-400 transition-colors">
+                  <div key={itm.id} className="bg-white border-2 border-dashed border-natural-border rounded-2xl p-5 shadow-xs text-left flex flex-col justify-between space-y-5 hover:border-brand-400 transition-colors relative">
+                    {/* Visual coupon notch */}
+                    <div className="absolute -left-3 top-1/2 -mt-2.5 w-5 h-5 bg-natural-bg border-r border-natural-border rounded-full pointer-events-none"></div>
+                    <div className="absolute -right-3 top-1/2 -mt-2.5 w-5 h-5 bg-natural-bg border-l border-natural-border rounded-full pointer-events-none"></div>
+                    
                     <div className="space-y-2">
                       <div className="flex justify-between items-start">
-                        <span className="text-[9px] bg-brand-50 border border-brand-100 text-brand-700 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                          {itm.discountPercentage}% Discount
+                        <span className="text-[9px] bg-brand-50 border border-brand-100 text-brand-700 font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                          <Percent className="w-3 h-3" /> {itm.discountPercentage}% Discount
                         </span>
-                        <span className="text-xs font-mono font-bold text-natural-text flex items-center gap-1">
+                        <span className="text-xs font-mono font-black text-natural-text flex items-center gap-1">
                           🪙 {itm.requiredCoins} pts
                         </span>
                       </div>
-                      <h4 className="font-display font-bold text-sm text-natural-text">{itm.restaurantName}</h4>
-                      <p className="text-xs text-natural-muted font-semibold leading-normal">{itm.description}</p>
+                      <h4 className="font-display font-bold text-sm text-natural-text pt-2 border-t border-natural-border/60">{itm.restaurantName}</h4>
+                      <p className="text-xs text-natural-muted font-semibold leading-relaxed">{itm.description}</p>
                     </div>
 
                     <button
                       onClick={() => handleRedeem(itm)}
                       disabled={!canAfford}
-                      className={canAfford ? 'btn-primary w-full' : 'btn-secondary w-full cursor-not-allowed opacity-50'}
+                      className={canAfford ? 'btn-primary w-full text-[10px] py-2' : 'btn-secondary w-full cursor-not-allowed opacity-50 text-[10px] py-2'}
                     >
-                      <Tag className="w-3.5 h-3.5 mr-1" /> Claim Voucher
+                      <Tag className="w-3.5 h-3.5 mr-1 shrink-0" /> Claim Voucher
                     </button>
                   </div>
                 );
@@ -176,9 +193,12 @@ export const VolunteerRewards: React.FC = () => {
 
           {/* Right panel: History of Redemptions */}
           <div className="lg:col-span-5 bg-white border border-natural-border rounded-2xl p-5 shadow-xs text-left flex flex-col space-y-4">
-            <div className="border-b border-natural-border pb-3">
-              <h3 className="font-display font-bold text-xs uppercase tracking-wider text-natural-text">Redeemed Coupons</h3>
-              <p className="text-[11px] text-natural-muted mt-1 font-semibold">Logs of discount coupons generated by your account profile</p>
+            <div className="border-b border-natural-border pb-3 flex items-center gap-1.5">
+              <Receipt className="w-4 h-4 text-brand-650" />
+              <div>
+                <h3 className="font-display font-bold text-xs uppercase tracking-wider text-natural-text">Redeemed Coupons</h3>
+                <p className="text-[10px] text-natural-muted mt-0.5 font-semibold">Active codes generated by your profile account</p>
+              </div>
             </div>
 
             {redemptions.length === 0 ? (
@@ -186,18 +206,18 @@ export const VolunteerRewards: React.FC = () => {
                 You haven't claimed any restaurant vouchers yet. Complete verified deliveries to earn points!
               </div>
             ) : (
-              <div className="divide-y divide-natural-border max-h-[350px] overflow-y-auto pr-1">
+              <div className="divide-y divide-natural-border max-h-[380px] overflow-y-auto pr-1">
                 {redemptions.map((red) => (
-                  <div key={red.id} className="py-3 flex justify-between items-center text-xs">
-                    <div>
-                      <strong className="text-natural-text block font-bold">{red.restaurantReward.restaurantName}</strong>
-                      <span className="text-[10px] text-natural-muted block mt-0.5 font-semibold">
-                        Claimed {new Date(red.redeemedAt).toLocaleDateString()}
+                  <div key={red.id} className="py-3.5 flex justify-between items-center text-xs gap-3">
+                    <div className="min-w-0">
+                      <strong className="text-natural-text block font-bold truncate uppercase">{red.restaurantReward.restaurantName}</strong>
+                      <span className="text-[10px] text-natural-muted block mt-1 font-semibold flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-natural-muted" /> Claimed {new Date(red.redeemedAt).toLocaleDateString()}
                       </span>
                     </div>
-                    <div className="text-right">
-                      <code className="text-xs font-mono font-bold text-accent-700 bg-accent-50 border border-accent-100 rounded px-2 py-0.5 block">{red.redemptionCode}</code>
-                      <span className="text-[9px] text-[#1C4030] font-black mt-1.5 block uppercase text-center tracking-widest">
+                    <div className="text-right shrink-0">
+                      <code className="text-xs font-mono font-black text-accent-700 bg-accent-50 border border-accent-100 rounded px-2.5 py-0.5 block tracking-widest">{red.redemptionCode}</code>
+                      <span className="text-[9px] text-[#1C4030] font-bold mt-1.5 block uppercase text-center tracking-widest bg-brand-50 border border-brand-100 rounded">
                         {red.restaurantReward.discountPercentage}% OFF
                       </span>
                     </div>

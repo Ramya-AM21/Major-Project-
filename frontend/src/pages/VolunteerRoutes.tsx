@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { MapView } from '../components/MapView';
 import { 
-  ArrowLeft, Plus, Trash2, Loader2, Route, CheckCircle2, AlertCircle
+  ArrowLeft, Plus, Trash2, Loader2, Route, CheckCircle2, AlertCircle, MapPin, Clock, Compass
 } from 'lucide-react';
 import axios from 'axios';
+import volunteerCommuteImg from '../assets/volunteer_commute.png';
 
 interface VolunteerRoute {
   id: string;
@@ -129,7 +130,6 @@ export const VolunteerRoutes: React.FC = () => {
     }
   };
 
-  // Compile markers to draw registered paths
   const getMapMarkers = () => {
     const markers = [];
     if (startLat !== null && startLng !== null) {
@@ -152,8 +152,20 @@ export const VolunteerRoutes: React.FC = () => {
       {/* List / Register form */}
       <div className="lg:col-span-6 space-y-6">
         <div className="border-b border-natural-border pb-5">
-          <h2 className="text-xl font-display font-black text-natural-text tracking-tight uppercase">Configure Commute Routes</h2>
-          <p className="text-xs text-natural-muted mt-1 font-semibold">Specify usual routes so we can query suitable surplus pick offers on your path</p>
+          <h2 className="text-2xl font-display font-black text-natural-text tracking-tight uppercase">Travel Commute Routes</h2>
+          <p className="text-xs text-natural-muted mt-0.5 font-semibold">Declare your usual journeys to match route surplus pickups.</p>
+        </div>
+
+        <div className="bg-white border border-natural-border p-4 rounded-2xl flex items-center space-x-4 shadow-xs">
+          <div className="flex-1">
+            <h3 className="font-display font-black text-xs uppercase tracking-wider text-natural-text">Commute-Based Redistribution</h3>
+            <p className="text-[10px] text-natural-muted leading-relaxed font-semibold mt-1">
+              Specify your usual origin and destination points. E-Meal dynamically matches active donations along your route, ensuring zero-carbon detour efficiency.
+            </p>
+          </div>
+          <div className="w-20 h-20 shrink-0 rounded-xl bg-brand-50/50 border border-brand-150 overflow-hidden flex items-center justify-center p-1.5">
+            <img src={volunteerCommuteImg} alt="Commute Route Illustration" className="w-full h-full object-contain rounded-lg" />
+          </div>
         </div>
 
         {errorText && (
@@ -169,13 +181,13 @@ export const VolunteerRoutes: React.FC = () => {
           
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Origin Name</label>
+              <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Origin Location Name</label>
               <input
                 type="text"
                 required
                 value={startName}
                 onChange={(e) => setStartName(e.target.value)}
-                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
                 placeholder="E.g. Home"
               />
               <button
@@ -183,45 +195,45 @@ export const VolunteerRoutes: React.FC = () => {
                 onClick={() => setPickingLocation('START')}
                 className={`mt-2 w-full text-center text-[9px] py-1.5 border rounded-lg font-black transition-all uppercase tracking-wider ${
                   pickingLocation === 'START'
-                    ? 'border-brand-600 bg-brand-100 text-brand-700'
+                    ? 'border-brand-600 bg-brand-50 text-brand-700'
                     : 'border-gray-200 bg-gray-50 text-natural-muted hover:bg-gray-100'
                 }`}
               >
-                {startLat ? 'Origin Coordinates set ✓' : 'Pin Origin'}
+                {startLat ? 'Origin Captured ✓' : 'Pin Origin'}
               </button>
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Destination Name</label>
+              <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Destination Location Name</label>
               <input
                 type="text"
                 required
                 value={endName}
                 onChange={(e) => setEndName(e.target.value)}
-                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
-                placeholder="E.g. College"
+                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
+                placeholder="E.g. Office"
               />
               <button
                 type="button"
                 onClick={() => setPickingLocation('END')}
                 className={`mt-2 w-full text-center text-[9px] py-1.5 border rounded-lg font-black transition-all uppercase tracking-wider ${
                   pickingLocation === 'END'
-                    ? 'border-brand-600 bg-brand-100 text-brand-700'
+                    ? 'border-brand-600 bg-brand-50 text-brand-700'
                     : 'border-gray-200 bg-gray-50 text-natural-muted hover:bg-gray-100'
                 }`}
               >
-                {endLat ? 'Destination set ✓' : 'Pin Destination'}
+                {endLat ? 'Destination Captured ✓' : 'Pin Destination'}
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Transit Mode</label>
+              <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Transit Mode</label>
               <select
                 value={routeType}
                 onChange={(e) => setRouteType(e.target.value as any)}
-                className="mt-1.5 block w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                className="mt-1.5 block w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
               >
                 <option value="DAILY">DAILY</option>
                 <option value="AD_HOC">AD HOC (One Time)</option>
@@ -229,33 +241,33 @@ export const VolunteerRoutes: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Start Time</label>
+              <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Active From</label>
               <input
                 type="text"
                 required
                 value={activeFrom}
                 onChange={(e) => setActiveFrom(e.target.value)}
-                className="mt-1.5 block w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                className="mt-1.5 block w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
                 placeholder="09:00 AM"
               />
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">End Time</label>
+              <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Active Until</label>
               <input
                 type="text"
                 required
                 value={activeUntil}
                 onChange={(e) => setActiveUntil(e.target.value)}
-                className="mt-1.5 block w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                className="mt-1.5 block w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
                 placeholder="10:00 AM"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted flex justify-between">
-              <span>Maximum acceptable route deviation</span>
+            <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted flex justify-between">
+              <span>Acceptable Route Detour Range</span>
               <span className="font-mono text-brand-650 font-black">{maxDeviation} km</span>
             </label>
             <input
@@ -272,31 +284,33 @@ export const VolunteerRoutes: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="btn-primary w-full flex justify-center"
+            className="btn-primary w-full flex justify-center text-[10px]"
           >
-            {loading ? 'Registering...' : 'Register Travel Route'}
+            {loading ? 'Syncing Pathway...' : 'Register Commute Route'}
           </button>
         </form>
 
         {/* List of registered ones */}
         <div className="bg-white border border-natural-border rounded-2xl shadow-xs overflow-hidden">
           <div className="p-4 border-b border-natural-border bg-[#FAF9F5]">
-            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Registered Commutes</h3>
+            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Declared Pathways</h3>
           </div>
           {routes.length === 0 ? (
             <div className="p-8 text-center text-xs text-natural-muted font-semibold">
-              No registered commute routes found. Use the map to declare commutes.
+              No registered commute routes found. Pin endpoints on the map grid.
             </div>
           ) : (
             <div className="divide-y divide-natural-border">
               {routes.map((rt) => (
-                <div key={rt.id} className="p-4 hover:bg-[#FAF9F5] transition-colors flex items-center justify-between text-xs">
-                  <div>
-                    <h5 className="font-bold text-natural-text uppercase tracking-wider">{rt.startName} ➔ {rt.endName}</h5>
-                    <div className="text-[9px] text-natural-muted mt-1.5 flex flex-wrap gap-2 font-bold uppercase tracking-wider">
-                      <span className="bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-mono font-extrabold">{rt.routeType}</span>
-                      <span className="bg-brand-100 text-brand-850 px-1.5 py-0.5 rounded font-mono font-extrabold">{rt.activeFrom} - {rt.activeUntil}</span>
-                      <span className="bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5 rounded font-mono font-extrabold">Detour: {rt.maxDeviation || 5.0} km</span>
+                <div key={rt.id} className="p-4 hover:bg-[#FAF9F5] transition-colors flex items-center justify-between text-xs gap-3">
+                  <div className="min-w-0">
+                    <h5 className="font-display font-black text-natural-text uppercase tracking-wider truncate flex items-center gap-1">
+                      <Route className="w-4 h-4 text-brand-600 shrink-0" /> {rt.startName} ➔ {rt.endName}
+                    </h5>
+                    <div className="text-[9px] text-natural-muted mt-2 flex flex-wrap gap-1.5 font-bold uppercase tracking-wider font-mono">
+                      <span className="bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded">{rt.routeType}</span>
+                      <span className="bg-brand-100 text-brand-850 px-1.5 py-0.5 rounded">{rt.activeFrom} - {rt.activeUntil}</span>
+                      <span className="bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5 rounded">Detour: {rt.maxDeviation || 5.0} km</span>
                     </div>
                   </div>
                   <button
@@ -315,12 +329,12 @@ export const VolunteerRoutes: React.FC = () => {
 
       {/* Map selector pane */}
       <div className="lg:col-span-6 flex flex-col min-h-[400px]">
-        <div className="p-3 bg-brand-50 border border-brand-100 rounded-xl mb-4 text-xs font-semibold text-brand-850 flex items-start space-x-2 text-left">
-          <AlertCircle className="w-4 h-4 shrink-0 text-brand-750 mt-0.5" />
+        <div className="p-3 bg-brand-50 border border-brand-100 rounded-xl mb-4 text-xs font-semibold text-brand-850 flex items-start space-x-2">
+          <Compass className="w-4 h-4 shrink-0 text-brand-750 mt-0.5" />
           <span>
             {pickingLocation 
-              ? `Move cursor to your ${pickingLocation} target on the map canvas and click to set coordinates.`
-              : 'Commute drawing: Click starting/ending hooks inside coordinates pickers to set travel bounds.'}
+              ? `Select coordinates for your ${pickingLocation} point by clicking anywhere on the map grid.`
+              : 'Pin location coordinate points by selecting Pin Origin/Destination buttons, then clicking map.'}
           </span>
         </div>
         <div className="flex-1 min-h-[350px] relative overflow-hidden rounded-2xl border border-natural-border">

@@ -115,9 +115,12 @@ public class AnalyticsService {
 
         for (DeliveryTask t : tasks) {
             String status = t.getStatus();
-            if ("ACCEPTED".equals(status)) {
+            boolean isAcceptedState = "ACCEPTED".equals(status) || "NAVIGATING_TO_PICKUP".equals(status) || "ARRIVED_AT_PICKUP".equals(status);
+            boolean isInTransitState = "IN_TRANSIT".equals(status) || "PICKED_UP".equals(status) || "NAVIGATING_TO_DESTINATION".equals(status) || "ARRIVED_AT_DESTINATION".equals(status) || "PROOF_SUBMISSION".equals(status) || "PHOTO_PENDING".equals(status) || "AI_VALIDATION".equals(status) || "ML_VALIDATION_PENDING".equals(status) || "VERIFIED".equals(status) || "REWARD_CREDITED".equals(status);
+            
+            if (isAcceptedState) {
                 expected++;
-            } else if ("IN_TRANSIT".equals(status)) {
+            } else if (isInTransitState) {
                 expected++;
                 pending++;
             } else if ("COMPLETED".equals(status) || "DELIVERED".equals(status)) {
@@ -157,7 +160,12 @@ public class AnalyticsService {
         List<DeliveryTask> allTasks = deliveryTaskRepository.findAll();
         for (DeliveryTask t : allTasks) {
             String status = t.getStatus();
-            if ("ACCEPTED".equals(status) || "IN_TRANSIT".equals(status)) {
+            boolean isActive = "ACCEPTED".equals(status) || "NAVIGATING_TO_PICKUP".equals(status) || "ARRIVED_AT_PICKUP".equals(status) || 
+                               "IN_TRANSIT".equals(status) || "PICKED_UP".equals(status) || "NAVIGATING_TO_DESTINATION".equals(status) || "ARRIVED_AT_DESTINATION".equals(status) || 
+                               "PROOF_SUBMISSION".equals(status) || "PHOTO_PENDING".equals(status) || "AI_VALIDATION".equals(status) || "ML_VALIDATION_PENDING".equals(status) || 
+                               "VERIFIED".equals(status) || "REWARD_CREDITED".equals(status);
+            
+            if (isActive) {
                 activeDeliveries++;
             } else if ("COMPLETED".equals(status)) {
                 completedToday++;

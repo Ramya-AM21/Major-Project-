@@ -91,4 +91,32 @@ public class DeliveryTaskController {
     public ResponseEntity<java.util.List<LocationTracking>> getLocationHistory(@PathVariable UUID id) {
         return ResponseEntity.ok(deliveryTaskService.getTaskLocationHistory(id));
     }
+
+    @PostMapping("/{id}/start-pickup")
+    @PreAuthorize("hasRole('VOLUNTEER')")
+    public ResponseEntity<DeliveryTask> startPickup(@PathVariable UUID id, Principal principal) {
+        DeliveryTask task = deliveryTaskService.startPickup(id, principal.getName());
+        return ResponseEntity.ok(task);
+    }
+
+    @PostMapping("/{id}/arrive-pickup")
+    @PreAuthorize("hasRole('VOLUNTEER')")
+    public ResponseEntity<DeliveryTask> arrivePickup(@PathVariable UUID id, Principal principal) {
+        DeliveryTask task = deliveryTaskService.arrivePickup(id, principal.getName());
+        return ResponseEntity.ok(task);
+    }
+
+    @PostMapping("/{id}/start-delivery")
+    @PreAuthorize("hasRole('VOLUNTEER')")
+    public ResponseEntity<DeliveryTask> startDelivery(@PathVariable UUID id, Principal principal) {
+        DeliveryTask task = deliveryTaskService.startDelivery(id, principal.getName());
+        return ResponseEntity.ok(task);
+    }
+
+    @PostMapping("/{id}/arrive-delivery")
+    @PreAuthorize("hasRole('VOLUNTEER')")
+    public ResponseEntity<DeliveryTask> arriveDelivery(@PathVariable UUID id, Principal principal) {
+        DeliveryTask task = deliveryTaskService.arriveDelivery(id, principal.getName());
+        return ResponseEntity.ok(task);
+    }
 }

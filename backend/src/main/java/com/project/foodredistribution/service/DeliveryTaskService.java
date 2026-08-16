@@ -133,9 +133,11 @@ public class DeliveryTaskService {
         // Enforce volunteer doesn't already have another active task
         List<DeliveryTask> activeTasks = deliveryTaskRepository.findByVolunteerUserEmail(volunteerEmail);
         for (DeliveryTask t : activeTasks) {
-            if ("ACCEPTED".equals(t.getStatus()) || "IN_TRANSIT".equals(t.getStatus()) || 
-                "ARRIVED".equals(t.getStatus()) || "PHOTO_PENDING".equals(t.getStatus()) || 
-                "ML_VALIDATION_PENDING".equals(t.getStatus())) {
+            String s = t.getStatus();
+            if ("ACCEPTED".equals(s) || "NAVIGATING_TO_PICKUP".equals(s) || "ARRIVED_AT_PICKUP".equals(s) || 
+                "PICKED_UP".equals(s) || "NAVIGATING_TO_DESTINATION".equals(s) || "ARRIVED_AT_DESTINATION".equals(s) || 
+                "PROOF_SUBMISSION".equals(s) || "PHOTO_PENDING".equals(s) || "AI_VALIDATION".equals(s) || 
+                "ML_VALIDATION_PENDING".equals(s) || "IN_TRANSIT".equals(s) || "ARRIVED".equals(s) || "PHOTO_REJECTED".equals(s)) {
                 throw new IllegalArgumentException("You already have another active delivery task. Complete or release it before accepting a new one.");
             }
         }
@@ -215,8 +217,8 @@ public class DeliveryTaskService {
         Verification verification = verificationRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Verification record not found for task: " + taskId));
 
-        if (!"ACCEPTED".equals(task.getStatus())) {
-            throw new IllegalArgumentException("Task must be accepted before pickup verification");
+        if (!"ACCEPTED".equals(task.getStatus()) && !"NAVIGATING_TO_PICKUP".equals(task.getStatus()) && !"ARRIVED_AT_PICKUP".equals(task.getStatus())) {
+            throw new IllegalArgumentException("Task must be at pickup location before verification");
         }
 
         if (!verification.getPickupOtp().equals(otp)) {
@@ -228,7 +230,7 @@ public class DeliveryTaskService {
         verification.setPickupLongitude(longitude);
         verificationRepository.save(verification);
 
-        task.setStatus("IN_TRANSIT");
+        task.setStatus("PICKED_UP");
         
         FoodListing food = task.getFoodListing();
         food.setStatus("IN_TRANSIT");
@@ -253,7 +255,7 @@ public class DeliveryTaskService {
         );
 
         // Broadcast WS
-        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "IN_TRANSIT"));
+        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "PICKED_UP"));
 
         return saved;
     }
@@ -265,8 +267,8 @@ public class DeliveryTaskService {
         Verification verification = verificationRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Verification record not found for task: " + taskId));
 
-        if (!"IN_TRANSIT".equals(task.getStatus()) && !"ARRIVED".equals(task.getStatus())) {
-            throw new IllegalArgumentException("Task must be in transit or arrived before delivery verification");
+        if (!"ARRIVED_AT_DESTINATION".equals(task.getStatus()) && !"NAVIGATING_TO_DESTINATION".equals(task.getStatus()) && !"IN_TRANSIT".equals(task.getStatus()) && !"ARRIVED".equals(task.getStatus()) && !"PICKED_UP".equals(task.getStatus())) {
+            throw new IllegalArgumentException("Task must be at destination location before verification");
         }
 
         if (!verification.getDeliveryOtp().equals(otp)) {
@@ -287,7 +289,7 @@ public class DeliveryTaskService {
         verification.setDeliveryRadiusVerified(true);
         verificationRepository.save(verification);
 
-        task.setStatus("PHOTO_PENDING");
+        task.setStatus("PROOF_SUBMISSION");
         DeliveryTask saved = deliveryTaskRepository.save(task);
 
         // Audit log
@@ -301,7 +303,7 @@ public class DeliveryTaskService {
         );
 
         // Broadcast state change
-        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "PHOTO_PENDING"));
+        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "PROOF_SUBMISSION"));
 
         return saved;
     }
@@ -309,9 +311,14 @@ public class DeliveryTaskService {
     @Transactional
     public DeliveryTask processDeliveryProof(UUID taskId, byte[] imageBytes, String filename, double latitude, double longitude) {
         DeliveryTask task = getById(taskId);
-        if (!"PHOTO_PENDING".equals(task.getStatus()) && !"ML_VALIDATION_PENDING".equals(task.getStatus())) {
+        if (!"PROOF_SUBMISSION".equals(task.getStatus()) && !"PHOTO_PENDING".equals(task.getStatus()) && !"ML_VALIDATION_PENDING".equals(task.getStatus()) && !"PHOTO_REJECTED".equals(task.getStatus())) {
             throw new IllegalArgumentException("Task cannot accept proof photos in current status: " + task.getStatus());
         }
+
+        // Set status to AI_VALIDATION during processing
+        task.setStatus("AI_VALIDATION");
+        deliveryTaskRepository.save(task);
+        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "AI_VALIDATION"));
 
         // Calculate Image Hash to prevent double token rewards and copy-cat submissions
         String imageHash = "";
@@ -407,6 +414,24 @@ public class DeliveryTaskService {
         proof.setMlStatus("SUCCESS");
         proof.setStatus("APPROVED");
         deliveryProofRepository.save(proof);
+
+        task.setStatus("VERIFIED");
+        deliveryTaskRepository.save(task);
+        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "VERIFIED"));
+
+        // Record successful delivery metric updates
+        volunteer.setSuccessfulDeliveries(volunteer.getSuccessfulDeliveries() + 1);
+        volunteer.setTotalDeliveries(volunteer.getTotalDeliveries() + 1);
+        volunteer.setRating(Math.min(5.0, Math.round((volunteer.getRating() + 0.1) * 10.0) / 10.0));
+        
+        // Compute dynamic points reward
+        int rewardedCoins = calculateReward(task, proof);
+        volunteer.setBalanceTokens((volunteer.getBalanceTokens() != null ? volunteer.getBalanceTokens() : 0) + rewardedCoins);
+        volunteerRepository.save(volunteer);
+
+        task.setStatus("REWARD_CREDITED");
+        deliveryTaskRepository.save(task);
+        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "REWARD_CREDITED"));
 
         task.setStatus("COMPLETED");
         food.setStatus("DELIVERED");
@@ -515,13 +540,35 @@ public class DeliveryTaskService {
         Zone zone = task.getZone();
         double remainingDistance = matchingService.calculateDistance(latitude, longitude, zone.getLatitude(), zone.getLongitude());
 
+        // New pickup geofence check
+        if ("NAVIGATING_TO_PICKUP".equals(task.getStatus())) {
+            double distanceToPickup = matchingService.calculateDistance(
+                latitude, longitude, 
+                task.getFoodListing().getPickupLatitude(), task.getFoodListing().getPickupLongitude()
+            );
+            if (distanceToPickup <= 0.25) {
+                task.setStatus("ARRIVED_AT_PICKUP");
+                auditLogService.log(
+                    task.getVolunteer().getUser().getEmail(),
+                    "VOLUNTEER", "ARRIVED_AT_PICKUP", "DeliveryTask", taskId.toString(),
+                    "Coordinates tracking verified arrival at provider location"
+                );
+                notificationService.sendNotification(
+                    task.getVolunteer().getUser().getEmail(),
+                    "Kitchen Reached",
+                    "You reached the provider kitchen " + task.getFoodListing().getProvider().getBusinessName() + ". Request the pickup OTP code."
+                );
+                webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "ARRIVED_AT_PICKUP"));
+            }
+        }
+
         // If volunteer enters within 250m radius and state is IN_TRANSIT, automatically flag ARRIVED
-        if ("IN_TRANSIT".equals(task.getStatus()) && remainingDistance <= 0.25) {
-            task.setStatus("ARRIVED");
+        if (("IN_TRANSIT".equals(task.getStatus()) || "PICKED_UP".equals(task.getStatus()) || "NAVIGATING_TO_DESTINATION".equals(task.getStatus())) && remainingDistance <= 0.25) {
+            task.setStatus("ARRIVED_AT_DESTINATION");
             auditLogService.log(
                 task.getVolunteer().getUser().getEmail(),
                 "VOLUNTEER",
-                "ARRIVED",
+                "ARRIVED_AT_DESTINATION",
                 "DeliveryTask",
                 taskId.toString(),
                 "Coordinates tracking verified arrival within zone range"
@@ -538,7 +585,7 @@ public class DeliveryTaskService {
             );
             
             // Broadcast state update
-            webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "ARRIVED"));
+            webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "ARRIVED_AT_DESTINATION"));
         }
 
         DeliveryTask saved = deliveryTaskRepository.save(task);
@@ -553,6 +600,58 @@ public class DeliveryTaskService {
         );
         webSocketHandler.broadcastUpdate("LOCATION_UPDATE", telemetryData);
 
+        return saved;
+    }
+
+    @Transactional
+    public DeliveryTask startPickup(UUID taskId, String volunteerEmail) {
+        DeliveryTask task = getById(taskId);
+        if (!"ACCEPTED".equals(task.getStatus())) {
+            throw new IllegalArgumentException("Task must be accepted before starting pickup route. Current status: " + task.getStatus());
+        }
+        task.setStatus("NAVIGATING_TO_PICKUP");
+        DeliveryTask saved = deliveryTaskRepository.save(task);
+        auditLogService.log(volunteerEmail, "VOLUNTEER", "START_PICKUP_ROUTE", "DeliveryTask", taskId.toString(), "Started route journey to provider kitchen");
+        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "NAVIGATING_TO_PICKUP"));
+        return saved;
+    }
+
+    @Transactional
+    public DeliveryTask arrivePickup(UUID taskId, String volunteerEmail) {
+        DeliveryTask task = getById(taskId);
+        if (!"NAVIGATING_TO_PICKUP".equals(task.getStatus()) && !"ACCEPTED".equals(task.getStatus())) {
+            throw new IllegalArgumentException("Task must be in navigating or accepted state to arrive at pickup. Current status: " + task.getStatus());
+        }
+        task.setStatus("ARRIVED_AT_PICKUP");
+        DeliveryTask saved = deliveryTaskRepository.save(task);
+        auditLogService.log(volunteerEmail, "VOLUNTEER", "ARRIVED_AT_PICKUP", "DeliveryTask", taskId.toString(), "Arrived at provider kitchen location");
+        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "ARRIVED_AT_PICKUP"));
+        return saved;
+    }
+
+    @Transactional
+    public DeliveryTask startDelivery(UUID taskId, String volunteerEmail) {
+        DeliveryTask task = getById(taskId);
+        if (!"PICKED_UP".equals(task.getStatus()) && !"IN_TRANSIT".equals(task.getStatus())) {
+            throw new IllegalArgumentException("Task must be picked up before starting delivery route. Current status: " + task.getStatus());
+        }
+        task.setStatus("NAVIGATING_TO_DESTINATION");
+        DeliveryTask saved = deliveryTaskRepository.save(task);
+        auditLogService.log(volunteerEmail, "VOLUNTEER", "START_DELIVERY_ROUTE", "DeliveryTask", taskId.toString(), "Started route journey to destination shelter");
+        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "NAVIGATING_TO_DESTINATION"));
+        return saved;
+    }
+
+    @Transactional
+    public DeliveryTask arriveDelivery(UUID taskId, String volunteerEmail) {
+        DeliveryTask task = getById(taskId);
+        if (!"NAVIGATING_TO_DESTINATION".equals(task.getStatus()) && !"PICKED_UP".equals(task.getStatus())) {
+            throw new IllegalArgumentException("Task must be navigating or picked up to arrive at delivery. Current status: " + task.getStatus());
+        }
+        task.setStatus("ARRIVED_AT_DESTINATION");
+        DeliveryTask saved = deliveryTaskRepository.save(task);
+        auditLogService.log(volunteerEmail, "VOLUNTEER", "ARRIVED_AT_DESTINATION", "DeliveryTask", taskId.toString(), "Arrived at destination shelter location");
+        webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "ARRIVED_AT_DESTINATION"));
         return saved;
     }
 
