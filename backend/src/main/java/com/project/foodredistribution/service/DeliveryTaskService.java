@@ -225,6 +225,13 @@ public class DeliveryTaskService {
             throw new IllegalArgumentException("Invalid Pickup OTP code");
         }
 
+        FoodListing food = task.getFoodListing();
+        double distanceToPickupKm = matchingService.calculateDistance(latitude, longitude, food.getPickupLatitude(), food.getPickupLongitude());
+        boolean radiusVerified = distanceToPickupKm <= 0.25; // 250m
+        if (!radiusVerified) {
+            throw new IllegalArgumentException("Location validation failed. You're still " + Math.round(distanceToPickupKm * 1000) + "m away from the pickup location. Must be within 250m to verify.");
+        }
+
         verification.setPickupTimestamp(LocalDateTime.now());
         verification.setPickupLatitude(latitude);
         verification.setPickupLongitude(longitude);
@@ -232,7 +239,6 @@ public class DeliveryTaskService {
 
         task.setStatus("PICKED_UP");
         
-        FoodListing food = task.getFoodListing();
         food.setStatus("IN_TRANSIT");
         foodListingRepository.save(food);
 
@@ -381,6 +387,7 @@ public class DeliveryTaskService {
 
         // Invoke FastAPI ML Model Service
         Map<String, Object> mlResult = aiIntegrationService.validateDeliveryProof(taskId, imageBytes, filename, latitude, longitude);
+        boolean isOffline = (boolean) mlResult.getOrDefault("isOffline", false);
         boolean isValid = (boolean) mlResult.getOrDefault("valid", false);
         double confidence = (double) mlResult.getOrDefault("confidence", 0.0);
         String reason = (String) mlResult.getOrDefault("reason", "Inference details unavailable");
@@ -391,23 +398,62 @@ public class DeliveryTaskService {
         Volunteer volunteer = task.getVolunteer();
         FoodListing food = task.getFoodListing();
 
-        if (!isValid) {
-            proof.setMlStatus("FAILED");
-            proof.setStatus("REJECTED");
+        if (isOffline) {
+            proof.setMlStatus("PENDING_REVIEW");
+            proof.setStatus("PENDING");
             deliveryProofRepository.save(proof);
 
-            task.setStatus("PHOTO_REJECTED");
+            task.setStatus("PENDING_VERIFICATION");
             deliveryTaskRepository.save(task);
 
-            auditLogService.log(volunteer.getUser().getEmail(), "VOLUNTEER", "PHOTO_REJECTED", "DeliveryTask", taskId.toString(), "ML Verification failed: " + reason);
+            auditLogService.log(volunteer.getUser().getEmail(), "VOLUNTEER", "ML_OFFLINE", "DeliveryTask", taskId.toString(), "AI service offline. Payout pending manual review.");
 
             notificationService.sendNotification(
                 volunteer.getUser().getEmail(),
-                "ML Photo validation failed",
-                "ML model flagged photo evidence: " + reason + ". Points withheld."
+                "Proof validation offline",
+                "Proof validation unavailable. Reward is pending verification."
             );
 
-            throw new IllegalArgumentException("ML model validation failed: " + reason);
+            throw new IllegalArgumentException("Proof validation unavailable. Reward is pending verification.");
+        }
+
+        if (!isValid) {
+            // Check if it is uncertain instead of completely failed
+            if (confidence >= 0.30 && confidence < 0.70) {
+                proof.setMlStatus("UNCERTAIN");
+                proof.setStatus("PENDING");
+                deliveryProofRepository.save(proof);
+
+                task.setStatus("PENDING_VERIFICATION");
+                deliveryTaskRepository.save(task);
+
+                auditLogService.log(volunteer.getUser().getEmail(), "VOLUNTEER", "ML_UNCERTAIN", "DeliveryTask", taskId.toString(), "AI validation uncertain (confidence: " + confidence + "). Payout pending verification.");
+
+                notificationService.sendNotification(
+                    volunteer.getUser().getEmail(),
+                    "Proof verification pending",
+                    "Proof validation uncertain. Reward is pending verification."
+                );
+
+                throw new IllegalArgumentException("Proof validation uncertain. Reward is pending verification.");
+            } else {
+                proof.setMlStatus("FAILED");
+                proof.setStatus("REJECTED");
+                deliveryProofRepository.save(proof);
+
+                task.setStatus("PHOTO_REJECTED");
+                deliveryTaskRepository.save(task);
+
+                auditLogService.log(volunteer.getUser().getEmail(), "VOLUNTEER", "PHOTO_REJECTED", "DeliveryTask", taskId.toString(), "ML Verification failed: " + reason);
+
+                notificationService.sendNotification(
+                    volunteer.getUser().getEmail(),
+                    "ML Photo validation failed",
+                    "ML model flagged photo evidence: " + reason + ". Points withheld."
+                );
+
+                throw new IllegalArgumentException("ML model validation failed: " + reason);
+            }
         }
 
         // If proof is verified
@@ -437,16 +483,6 @@ public class DeliveryTaskService {
         food.setStatus("DELIVERED");
         deliveryTaskRepository.save(task);
         foodListingRepository.save(food);
-
-        // Record successful delivery metric updates
-        volunteer.setSuccessfulDeliveries(volunteer.getSuccessfulDeliveries() + 1);
-        volunteer.setTotalDeliveries(volunteer.getTotalDeliveries() + 1);
-        volunteer.setRating(Math.min(5.0, Math.round((volunteer.getRating() + 0.1) * 10.0) / 10.0));
-        
-        // Compute dynamic points reward
-        int rewardedCoins = calculateReward(task, proof);
-        volunteer.setBalanceTokens((volunteer.getBalanceTokens() != null ? volunteer.getBalanceTokens() : 0) + rewardedCoins);
-        volunteerRepository.save(volunteer);
 
         // Save wallet transaction log
         TokenTransaction transaction = new TokenTransaction(
@@ -532,10 +568,30 @@ public class DeliveryTaskService {
 
     @Transactional
     public DeliveryTask updateTaskLocation(UUID taskId, Double latitude, Double longitude) {
+        return updateTaskLocation(taskId, latitude, longitude, null, null);
+    }
+
+    @Transactional
+    public DeliveryTask updateTaskLocation(UUID taskId, Double latitude, Double longitude, Double accuracy, String timestamp) {
         DeliveryTask task = getById(taskId);
+
+        if (accuracy != null && accuracy > matchingService.getGpsAccuracyThresholdMeters()) {
+            log.warn("Ignoring task location update due to low accuracy: {} meters", accuracy);
+            return task;
+        }
+
         task.setCurrentLatitude(latitude);
         task.setCurrentLongitude(longitude);
-        task.setLastLocationUpdate(LocalDateTime.now());
+        
+        java.time.LocalDateTime updateTime = java.time.LocalDateTime.now();
+        if (timestamp != null && !timestamp.trim().isEmpty()) {
+            try {
+                updateTime = java.time.LocalDateTime.parse(timestamp.replace("Z", ""));
+            } catch (Exception e) {
+                // Ignore parse error
+            }
+        }
+        task.setLastLocationUpdate(updateTime);
         
         Zone zone = task.getZone();
         double remainingDistance = matchingService.calculateDistance(latitude, longitude, zone.getLatitude(), zone.getLongitude());
@@ -591,12 +647,13 @@ public class DeliveryTaskService {
         DeliveryTask saved = deliveryTaskRepository.save(task);
 
         LocationTracking tracking = new LocationTracking(task, latitude, longitude);
+        tracking.setTimestamp(updateTime);
         locationTrackingRepository.save(tracking);
 
         // Broadcast telemetry details
         String telemetryData = String.format(
-            "{\"taskId\":\"%s\",\"status\":\"%s\",\"latitude\":%f,\"longitude\":%f,\"remainingDistance\":%f}",
-            taskId, task.getStatus(), latitude, longitude, remainingDistance
+            "{\"taskId\":\"%s\",\"status\":\"%s\",\"latitude\":%f,\"longitude\":%f,\"remainingDistance\":%f,\"accuracy\":%f,\"timestamp\":\"%s\"}",
+            taskId, task.getStatus(), latitude, longitude, remainingDistance, (accuracy != null ? accuracy : 0.0), updateTime.toString()
         );
         webSocketHandler.broadcastUpdate("LOCATION_UPDATE", telemetryData);
 

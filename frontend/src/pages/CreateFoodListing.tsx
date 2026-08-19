@@ -42,6 +42,20 @@ export const CreateFoodListing: React.FC = () => {
   const [success, setSuccess] = useState(false);
 
   // Load defaults on mount
+  const [filteredZones, setFilteredZones] = useState<any[]>([]);
+ 
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+ 
   useEffect(() => {
     // Pre-fill location coordinates from provider credentials if cache is available
     const storedUser = localStorage.getItem('user');
@@ -53,21 +67,43 @@ export const CreateFoodListing: React.FC = () => {
         setLongitude(parsed.provider.longitude || null);
       }
     }
-
+ 
     const fetchZones = async () => {
       try {
         const res = await axios.get('/api/v1/zones');
         setZones(res.data || []);
-        if (res.data && res.data.length > 0) {
-          setSelectedZoneId(res.data[0].id);
-        }
       } catch (e) {
         console.error("Could not fetch active zones list", e);
       }
     };
     fetchZones();
   }, []);
-
+ 
+  useEffect(() => {
+    if (latitude === null || longitude === null) {
+      setFilteredZones(zones);
+      return;
+    }
+    const computed = zones
+      .map(zone => {
+        const dist = calculateDistance(latitude, longitude, zone.latitude, zone.longitude);
+        return { ...zone, distanceToPickup: dist };
+      })
+      .filter(zone => zone.distanceToPickup <= 25.0) // 25 km threshold
+      .sort((a, b) => a.distanceToPickup - b.distanceToPickup);
+ 
+    setFilteredZones(computed);
+ 
+    if (computed.length > 0) {
+      const exists = computed.some(z => z.id === selectedZoneId);
+      if (!exists) {
+        setSelectedZoneId(computed[0].id);
+      }
+    } else {
+      setSelectedZoneId('');
+    }
+  }, [latitude, longitude, zones]);
+ 
   const handleLocationSelect = (lat: number, lng: number) => {
     setLatitude(lat);
     setLongitude(lng);
@@ -281,22 +317,93 @@ export const CreateFoodListing: React.FC = () => {
           {/* Section 3: Target Community Zone */}
           <div className="space-y-4 pt-4 border-t border-natural-border">
             <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">3. Target Community Zone</h3>
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Select Recipient Shelter / Redistribution Center</label>
-              <select
-                required
-                value={selectedZoneId}
-                onChange={(e) => setSelectedZoneId(e.target.value)}
-                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
-              >
-                <option value="">-- Select Target Zone --</option>
-                {zones.map((zone) => (
-                  <option key={zone.id} value={zone.id}>
-                    {zone.name} — {zone.address} (Priority: {zone.priorityScore || 'Medium'})
-                  </option>
-                ))}
-              </select>
-            </div>
+            
+            {latitude !== null && filteredZones.length === 0 ? (
+              <div className="bg-[#FAF9F5] border border-brand-100 p-4 rounded-xl space-y-3">
+                <div className="flex items-start space-x-2 text-xs font-semibold text-brand-850">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-brand-650 mt-0.5" />
+                  <span>No active redistribution shelters found within 25 km of your location. You can quickly register a local shelter in your area:</span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 pt-2 text-xs">
+                  <div>
+                    <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Shelter Name</label>
+                    <input
+                      type="text"
+                      id="quick-shelter-name"
+                      placeholder="e.g. Mumbai Community Shelter"
+                      className="mt-1 block w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Shelter Address</label>
+                    <input
+                      type="text"
+                      id="quick-shelter-address"
+                      placeholder="e.g. Bandra West, Mumbai"
+                      className="mt-1 block w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs bg-white"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const nameEl = document.getElementById('quick-shelter-name') as HTMLInputElement;
+                    const addrEl = document.getElementById('quick-shelter-address') as HTMLInputElement;
+                    if (!nameEl?.value || !addrEl?.value) {
+                      setError("Please provide both name and address for the new shelter.");
+                      return;
+                    }
+                    setError(null);
+                    try {
+                      // Slight offset to represent a real delivery trip (approx 500m to 1km)
+                      const offsetLat = (latitude || 0) + 0.006;
+                      const offsetLng = (longitude || 0) + 0.006;
+                      
+                      const newZonePayload = {
+                        name: nameEl.value,
+                        address: addrEl.value,
+                        latitude: offsetLat,
+                        longitude: offsetLng,
+                        capacity: 150,
+                        operatingHours: "08:00 AM - 09:00 PM",
+                        priorityScore: 7.5,
+                        status: "ACTIVE"
+                      };
+                      const res = await axios.post('/api/v1/zones', newZonePayload);
+                      
+                      // Refetch all zones to reload dropdown lists
+                      const refetchRes = await axios.get('/api/v1/zones');
+                      setZones(refetchRes.data || []);
+                      setSelectedZoneId(res.data.id);
+                    } catch (err: any) {
+                      setError("Failed to create shelter: " + (err.response?.data?.message || err.message));
+                    }
+                  }}
+                  className="btn-secondary py-1.5 px-3 text-[10px]"
+                >
+                  Register & Select Local Shelter
+                </button>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Select Recipient Shelter / Redistribution Center</label>
+                <select
+                  required
+                  value={selectedZoneId}
+                  onChange={(e) => setSelectedZoneId(e.target.value)}
+                  className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                >
+                  <option value="">-- Select Target Zone --</option>
+                  {filteredZones.map((zone) => (
+                    <option key={zone.id} value={zone.id}>
+                      {zone.name} — {zone.address} (Priority: {zone.priorityScore || 'Medium'}) {zone.distanceToPickup !== undefined ? `[${zone.distanceToPickup.toFixed(1)} km away]` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Section 4: GPS coords pick */}

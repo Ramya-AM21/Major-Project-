@@ -77,13 +77,28 @@ public class DeliveryTaskController {
     }
 
     @PostMapping("/{id}/location")
-    public ResponseEntity<DeliveryTask> updateLocation(@PathVariable UUID id, @RequestBody java.util.Map<String, Double> payload) {
-        Double latitude = payload.get("latitude");
-        Double longitude = payload.get("longitude");
-        if (latitude == null || longitude == null) {
+    public ResponseEntity<DeliveryTask> updateLocation(@PathVariable UUID id, @RequestBody java.util.Map<String, Object> payload) {
+        Object latObj = payload.get("latitude");
+        Object lngObj = payload.get("longitude");
+        if (latObj == null || lngObj == null) {
             return ResponseEntity.badRequest().build();
         }
-        DeliveryTask updated = deliveryTaskService.updateTaskLocation(id, latitude, longitude);
+        Double latitude = ((Number) latObj).doubleValue();
+        Double longitude = ((Number) lngObj).doubleValue();
+
+        Object accObj = payload.get("accuracy");
+        Double accuracy = null;
+        if (accObj != null) {
+            accuracy = ((Number) accObj).doubleValue();
+        }
+
+        Object timeObj = payload.get("timestamp");
+        String timestamp = null;
+        if (timeObj != null) {
+            timestamp = timeObj.toString();
+        }
+
+        DeliveryTask updated = deliveryTaskService.updateTaskLocation(id, latitude, longitude, accuracy, timestamp);
         return ResponseEntity.ok(updated);
     }
 

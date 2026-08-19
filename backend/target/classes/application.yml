@@ -30,3 +30,8 @@ app:
     expiration-ms: 86400000 # 24 hours
   ai:
     url: ${AI_SERVICE_URL:http://localhost:8000}
+  matching:
+    max-route-deviation-km: ${MAX_ROUTE_DEVIATION_KM:2.0}
+    max-volunteer-to-shelter-distance-km: ${MAX_VOLUNTEER_TO_SHELTER_DISTANCE_KM:5.0}
+    min-match-distance-meters: ${MIN_MATCH_DISTANCE_METERS:100.0}
+    gps-accuracy-threshold-meters: ${GPS_ACCURACY_THRESHOLD_METERS:50.0}

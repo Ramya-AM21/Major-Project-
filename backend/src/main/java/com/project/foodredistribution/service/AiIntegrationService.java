@@ -118,16 +118,13 @@ public class AiIntegrationService {
             log.warn("FastAPI ML proof-validation service unavailable: {}. Falling back to baseline simulation.", ex.getMessage());
         }
 
-        // Fallback: if offline, return normal logic but log it
+        // Fallback: if offline, return offline state to let backend keep reward pending
         Map<String, Object> fallback = new HashMap<>();
-        boolean valid = true;
-        if (filename.toLowerCase().contains("fake") || filename.toLowerCase().contains("cheat")) {
-            valid = false;
-        }
-        fallback.put("valid", valid);
-        fallback.put("confidence", 0.88);
-        fallback.put("anomalyScore", 0.05);
-        fallback.put("reason", valid ? "Local validation fallback (AI offline)" : "Suspicious metadata or filename signature");
+        fallback.put("valid", false);
+        fallback.put("isOffline", true);
+        fallback.put("confidence", 0.0);
+        fallback.put("anomalyScore", 0.0);
+        fallback.put("reason", "Proof validation unavailable (AI service offline).");
         fallback.put("source", "Baseline System Security (AI Offline Fallback)");
         return fallback;
     }

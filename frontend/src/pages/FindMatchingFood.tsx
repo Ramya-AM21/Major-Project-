@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { MapView } from '../components/MapView';
 import { 
   Navigation, MapPin, Compass, AlertCircle, RefreshCw, CheckCircle, Clock, 
-  Award, Shield, Trash2, ArrowRight, Info, ChevronDown, ChevronUp
+  Award, Shield, Trash2, ArrowRight, Info, ChevronDown, ChevronUp, Search, Loader2
 } from 'lucide-react';
 import axios from 'axios';
 import foodRescueImg from '../assets/food_rescue.png';
@@ -55,6 +55,14 @@ interface MatchRecommendation {
   routeId: string | null;
   deviation: number;
   matchingScore: number;
+  distanceToVolunteer?: number | null;
+  distanceToDestination?: number | null;
+  shelterToDestinationDistance?: number | null;
+  distanceToRoute?: number | null;
+  isAhead?: boolean;
+  positionStatus?: string;
+  volunteerRouteProgress?: number | null;
+  shelterRouteProgress?: number | null;
 }
 
 export const FindMatchingFood: React.FC = () => {
@@ -73,8 +81,18 @@ export const FindMatchingFood: React.FC = () => {
   const [endLat, setEndLat] = useState<number | null>(null);
   const [endLng, setEndLng] = useState<number | null>(null);
   const [maxDeviation, setMaxDeviation] = useState<number>(3.0);
-  const [pickingLocation, setPickingLocation] = useState<'START' | 'END' | null>(null);
   const [startingRoute, setStartingRoute] = useState(false);
+
+  // Destination autocomplete search states
+  const [destinationSearch, setDestinationSearch] = useState('');
+  const [destinationSuggestions, setDestinationSuggestions] = useState<any[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  // OSRM calculated route state
+  const [routeGeometryPoints, setRouteGeometryPoints] = useState<[number, number][]>([]);
+  const [routeDistance, setRouteDistance] = useState<number | null>(null);
+  const [routeDuration, setRouteDuration] = useState<number | null>(null);
+  const [loadingRouteGeometry, setLoadingRouteGeometry] = useState(false);
 
   // Matching Tasks states
   const [matches, setMatches] = useState<MatchRecommendation[]>([]);
@@ -86,10 +104,143 @@ export const FindMatchingFood: React.FC = () => {
   const [expandedRecId, setExpandedRecId] = useState<string | null>(null);
 
   // Geolocation / GPS states
-  const [currentLat, setCurrentLat] = useState<number>(12.9716);
-  const [currentLng, setCurrentLng] = useState<number>(77.5946);
-  const [isSimulated, setIsSimulated] = useState<boolean>(false);
+  const [currentLat, setCurrentLat] = useState<number | null>(null);
+  const [currentLng, setCurrentLng] = useState<number | null>(null);
+  const [gpsPermissionStatus, setGpsPermissionStatus] = useState<'granted' | 'denied' | 'unavailable' | 'checking'>('checking');
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [gpsAccuracyWarning, setGpsAccuracyWarning] = useState<string | null>(null);
+  const lastUploadedCoords = useRef<{ lat: number; lng: number; time: number } | null>(null);
+
+  // Haversine distance calculator
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Obtain volunteer's current GPS location via Browser Geolocation API
+  const handleUseCurrentLocation = () => {
+    setGpsPermissionStatus('checking');
+    if (!navigator.geolocation) {
+      setGpsPermissionStatus('unavailable');
+      setErrorStatus("Geolocation is not supported by your browser/device.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        setCurrentLat(latitude);
+        setCurrentLng(longitude);
+        setStartLat(latitude);
+        setStartLng(longitude);
+        setGpsAccuracy(accuracy);
+        setGpsPermissionStatus('granted');
+        setErrorStatus(null);
+
+        // Reverse geocode to get a readable origin name
+        try {
+          const res = await axios.get('https://nominatim.openstreetmap.org/reverse', {
+            params: {
+              lat: latitude,
+              lon: longitude,
+              format: 'json'
+            }
+          });
+          if (res.data && res.data.display_name) {
+            setStartName(res.data.display_name);
+          } else {
+            setStartName(`My Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
+          }
+        } catch (err) {
+          setStartName(`My Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
+        }
+      },
+      (error) => {
+        setGpsPermissionStatus('denied');
+        setErrorStatus("Location permission is required to find food along your route.");
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  // Destination Autocomplete Nominatim fetch
+  useEffect(() => {
+    if (destinationSearch.length < 3) {
+      setDestinationSuggestions([]);
+      return;
+    }
+    const delayDebounce = setTimeout(async () => {
+      setLoadingSuggestions(true);
+      try {
+        const res = await axios.get('https://nominatim.openstreetmap.org/search', {
+          params: {
+            q: destinationSearch,
+            format: 'json',
+            limit: 5,
+            addressdetails: 1
+          }
+        });
+        setDestinationSuggestions(res.data || []);
+      } catch (err) {
+        console.warn("Nominatim autocomplete search failed", err);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 600); // 600ms debounce
+    return () => clearTimeout(delayDebounce);
+  }, [destinationSearch]);
+
+  const handleSelectSuggestion = (suggestion: any) => {
+    setEndName(suggestion.display_name);
+    setEndLat(parseFloat(suggestion.lat));
+    setEndLng(parseFloat(suggestion.lon));
+    setDestinationSuggestions([]);
+    setDestinationSearch(suggestion.display_name);
+  };
+
+  // OSRM route geometry calculation
+  useEffect(() => {
+    if (startLat && startLng && endLat && endLng) {
+      const fetchOSRMRoute = async () => {
+        setLoadingRouteGeometry(true);
+        try {
+          const res = await axios.get(`https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}`, {
+            params: {
+              overview: 'full',
+              geometries: 'geojson'
+            }
+          });
+          if (res.data && res.data.routes && res.data.routes.length > 0) {
+            const route = res.data.routes[0];
+            const coordinates = route.geometry.coordinates.map((c: any) => [c[1], c[0]] as [number, number]);
+            setRouteGeometryPoints(coordinates);
+            setRouteDistance(route.distance / 1000); // km
+            setRouteDuration(route.duration / 60); // minutes
+          }
+        } catch (err) {
+          console.warn("OSRM routing calculation failed", err);
+          // Fallback to straight line
+          setRouteGeometryPoints([ [startLat, startLng], [endLat, endLng] ]);
+          setRouteDistance(calculateDistance(startLat, startLng, endLat, endLng));
+          setRouteDuration(calculateDistance(startLat, startLng, endLat, endLng) * 2.5);
+        } finally {
+          setLoadingRouteGeometry(false);
+        }
+      };
+      fetchOSRMRoute();
+    } else {
+      setRouteGeometryPoints([]);
+      setRouteDistance(null);
+      setRouteDuration(null);
+    }
+  }, [startLat, startLng, endLat, endLng]);
 
   // Fetch active route on mount
   const checkActiveRoute = async () => {
@@ -99,15 +250,19 @@ export const FindMatchingFood: React.FC = () => {
       const active = res.data.find((r: any) => r.status === 'ACTIVE');
       if (active) {
         setActiveRoute(active);
-        if (active.currentLatitude) {
-          setCurrentLat(active.currentLatitude);
-          setCurrentLng(active.currentLongitude);
-        } else {
-          setCurrentLat(active.startLatitude);
-          setCurrentLng(active.startLongitude);
-        }
+        setCurrentLat(active.currentLatitude || active.startLatitude);
+        setCurrentLng(active.currentLongitude || active.startLongitude);
+        setStartLat(active.startLatitude);
+        setStartLng(active.startLongitude);
+        setEndLat(active.endLatitude);
+        setEndLng(active.endLongitude);
+        setStartName(active.startName);
+        setEndName(active.endName);
+        setDestinationSearch(active.endName);
+        setGpsPermissionStatus('granted');
       } else {
         setActiveRoute(null);
+        handleUseCurrentLocation(); // Request location immediately on idle
       }
     } catch (e) {
       console.error("Failed to check active route state", e);
@@ -137,52 +292,57 @@ export const FindMatchingFood: React.FC = () => {
     if (activeRoute) {
       fetchMatches();
     }
-  }, [activeRoute?.id]);
-
-  // watchPosition hook for capturing device coordinates
+  }, [activeRoute?.id]);  // watchPosition hook for streaming device coordinates
   useEffect(() => {
-    if (!activeRoute || isSimulated) return;
+    if (!activeRoute) return;
 
     let watchId: number | null = null;
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude, longitude, accuracy } = pos.coords;
-          setCurrentLat(latitude);
-          setCurrentLng(longitude);
-          setGpsAccuracy(accuracy);
-          
-          axios.put(`/api/v1/volunteers/routes/${activeRoute.id}/location`, {
-            latitude,
-            longitude
-          }).catch(e => console.warn("Failed to transmit coordinates", e));
-
-          axios.post('/api/v1/volunteers/location', {
-            latitude,
-            longitude,
-            timestamp: new Date().toISOString()
-          }).catch(e => console.warn("Failed to update general location", e));
-        },
-        (err) => console.warn("GPS lookup failed", err),
-        { enableHighAccuracy: true }
-      );
-
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
           const { latitude, longitude, accuracy } = pos.coords;
           setCurrentLat(latitude);
           setCurrentLng(longitude);
           setGpsAccuracy(accuracy);
+          setGpsPermissionStatus('granted');
+
+          if (accuracy > 50) {
+            setGpsAccuracyWarning(`GPS accuracy is low (${Math.round(accuracy)}m). Ignoring update.`);
+            return;
+          } else {
+            setGpsAccuracyWarning(null);
+          }
+
+          const now = Date.now();
+          if (lastUploadedCoords.current) {
+            const dist = calculateDistance(
+              lastUploadedCoords.current.lat,
+              lastUploadedCoords.current.lng,
+              latitude,
+              longitude
+            ) * 1000; // in meters
+            const timeElapsed = now - lastUploadedCoords.current.time;
+
+            if (dist < 15 && timeElapsed < 5000) {
+              return;
+            }
+          }
+
+          lastUploadedCoords.current = { lat: latitude, lng: longitude, time: now };
+          const timestamp = new Date().toISOString();
 
           axios.put(`/api/v1/volunteers/routes/${activeRoute.id}/location`, {
             latitude,
-            longitude
+            longitude,
+            accuracy,
+            timestamp
           }).catch(e => console.warn("Failed to stream coordinates", e));
 
           axios.post('/api/v1/volunteers/location', {
             latitude,
             longitude,
-            timestamp: new Date().toISOString()
+            accuracy,
+            timestamp
           }).catch(e => console.warn("Failed to update general location", e));
         },
         (err) => console.warn("GPS watching failed", err),
@@ -195,8 +355,7 @@ export const FindMatchingFood: React.FC = () => {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [activeRoute?.id, isSimulated]);
-
+  }, [activeRoute?.id]);
   // WebSocket subscriptions for real-time matches/assignment
   useEffect(() => {
     if (!activeRoute) return;
@@ -211,7 +370,7 @@ export const FindMatchingFood: React.FC = () => {
         try {
           const data = JSON.parse(event.data);
           
-          if (data.topic === 'FOOD_MATCH_FOUND') {
+          if (data.topic === 'FOOD_MATCH_FOUND' || data.topic === 'LOCATION_UPDATE') {
             fetchMatches();
           } else if (data.topic === 'TASK_ACCEPTED') {
             const acceptedData = typeof data.payload === 'string' ? JSON.parse(data.payload) : data.payload;
@@ -234,33 +393,28 @@ export const FindMatchingFood: React.FC = () => {
     };
   }, [activeRoute?.id]);
 
-  const handleCoordinatesPick = (lat: number, lng: number) => {
-    if (pickingLocation === 'START') {
-      setStartLat(lat);
-      setStartLng(lng);
-      setPickingLocation(null);
-    } else if (pickingLocation === 'END') {
-      setEndLat(lat);
-      setEndLng(lng);
-      setPickingLocation(null);
-    }
-  };
-
   const handleStartRoute = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorStatus(null);
 
-    if (startLat === null || endLat === null) {
-      setErrorStatus("Please pin both start and destination points on the map canvas.");
+    if (startLat === null || startLng === null) {
+      setErrorStatus("Current location coordinate is missing. Please enable location permissions.");
+      return;
+    }
+    if (endLat === null || endLng === null) {
+      setErrorStatus("Please search and select a destination from autocomplete dropdown.");
       return;
     }
     if (!startName || !endName) {
-      setErrorStatus("Please provide name labels for start and destination locations.");
+      setErrorStatus("Please provide names for origin and destination locations.");
       return;
     }
 
     setStartingRoute(true);
     try {
+      // detailed road geometry path from OSRM saved in DB as a string of coordinates
+      const geomString = routeGeometryPoints.map(p => `${p[0]},${p[1]}`).join(';');
+
       const payload = {
         startLatitude: startLat,
         startLongitude: startLng,
@@ -268,9 +422,9 @@ export const FindMatchingFood: React.FC = () => {
         endLongitude: endLng,
         startName,
         endName,
-        routeGeometry: `${startLat},${startLng};${endLat},${endLng}`,
+        routeGeometry: geomString,
         routeType: 'AD_HOC',
-        activeFrom: '08:00 AM',
+        activeFrom: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         activeUntil: '11:59 PM',
         maxDeviation,
         status: 'ACTIVE'
@@ -278,8 +432,8 @@ export const FindMatchingFood: React.FC = () => {
 
       const res = await axios.post('/api/v1/volunteers/routes', payload);
       setActiveRoute(res.data);
-      setCurrentLat(startLat!);
-      setCurrentLng(startLng!);
+      setCurrentLat(startLat);
+      setCurrentLng(startLng);
     } catch (err: any) {
       setErrorStatus(err.response?.data?.message || "Failed to start active route.");
     } finally {
@@ -296,6 +450,11 @@ export const FindMatchingFood: React.FC = () => {
       await axios.delete(`/api/v1/volunteers/routes/${activeRoute.id}`);
       setActiveRoute(null);
       setMatches([]);
+      setEndLat(null);
+      setEndLng(null);
+      setDestinationSearch('');
+      setRouteGeometryPoints([]);
+      handleUseCurrentLocation();
     } catch {
       setErrorStatus("Failed to cancel active route.");
     }
@@ -315,7 +474,7 @@ export const FindMatchingFood: React.FC = () => {
       }
 
       await axios.post(`/api/v1/tasks/${associatedTask.id}/accept`);
-      setSuccessStatus("Delivery task accepted successfully! Navigating to your dashboard to complete the handover...");
+      setSuccessStatus("Delivery task accepted successfully! Navigating to your dashboard...");
       fetchMatches();
       
       setTimeout(() => {
@@ -323,28 +482,6 @@ export const FindMatchingFood: React.FC = () => {
       }, 2000);
     } catch (err: any) {
       setErrorStatus(err.response?.data?.message || err.message || 'Could not accept this task matching offer.');
-    }
-  };
-
-  const handleSimulateGPS = (lat: number, lng: number) => {
-    setIsSimulated(true);
-    setCurrentLat(lat);
-    setCurrentLng(lng);
-    setGpsAccuracy(10);
-
-    axios.post('/api/v1/volunteers/location', {
-      latitude: lat,
-      longitude: lng,
-      timestamp: new Date().toISOString()
-    }).catch(err => console.warn("Failed to stream simulated coordinates", err));
-
-    if (activeRoute) {
-      axios.put(`/api/v1/volunteers/routes/${activeRoute.id}/location`, {
-        latitude: lat,
-        longitude: lng
-      }).then(() => {
-        fetchMatches();
-      }).catch(e => console.error("Simulated location sync error", e));
     }
   };
 
@@ -358,23 +495,25 @@ export const FindMatchingFood: React.FC = () => {
   const getMapMarkers = () => {
     const markers = [];
     
-    markers.push({
-      id: 'volunteer',
-      latitude: currentLat,
-      longitude: currentLng,
-      title: isSimulated ? 'Your Position (Simulated)' : 'Your GPS Location',
-      role: 'CURRENT' as const
-    });
+    if (currentLat !== null && currentLng !== null) {
+      markers.push({
+        id: 'volunteer',
+        latitude: currentLat,
+        longitude: currentLng,
+        title: 'Your Position',
+        role: 'CURRENT' as const
+      });
+    }
 
     if (activeRoute) {
       markers.push({ id: 'start', latitude: activeRoute.startLatitude, longitude: activeRoute.startLongitude, title: `Start: ${activeRoute.startName}`, role: 'ZONE' as const });
       markers.push({ id: 'end', latitude: activeRoute.endLatitude, longitude: activeRoute.endLongitude, title: `Destination: ${activeRoute.endName}`, role: 'ZONE' as const });
     } else {
       if (startLat && startLng) {
-        markers.push({ id: 'form-start', latitude: startLat, longitude: startLng, title: 'Start Location', role: 'ZONE' as const });
+        markers.push({ id: 'form-start', latitude: startLat, longitude: startLng, title: 'Start Point', role: 'ZONE' as const });
       }
       if (endLat && endLng) {
-        markers.push({ id: 'form-end', latitude: endLat, longitude: endLng, title: 'End Location', role: 'ZONE' as const });
+        markers.push({ id: 'form-end', latitude: endLat, longitude: endLng, title: 'Destination Point', role: 'ZONE' as const });
       }
     }
 
@@ -400,22 +539,6 @@ export const FindMatchingFood: React.FC = () => {
     return markers;
   };
 
-  const getMapPolyline = () => {
-    if (activeRoute) {
-      return [
-        [activeRoute.startLatitude, activeRoute.startLongitude] as [number, number],
-        [activeRoute.endLatitude, activeRoute.endLongitude] as [number, number]
-      ];
-    }
-    if (startLat && endLat) {
-      return [
-        [startLat, startLng!] as [number, number],
-        [endLat, endLng!] as [number, number]
-      ];
-    }
-    return [];
-  };
-
   return (
     <div className="space-y-6 max-w-6xl mx-auto text-left">
       
@@ -427,8 +550,8 @@ export const FindMatchingFood: React.FC = () => {
         </div>
         <div>
           {activeRoute ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200 text-brand-850 text-[10px] font-bold font-mono uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 bg-brand-600 rounded-full animate-ping"></span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-50 border border-brand-200 text-brand-700 text-[10px] font-bold font-mono uppercase tracking-wider">
+              <span className="w-1.5 h-1.5 bg-brand-600 rounded-full animate-pulse"></span>
               Route Matching Active
             </span>
           ) : (
@@ -451,16 +574,36 @@ export const FindMatchingFood: React.FC = () => {
         </div>
       </div>
 
+      {/* Geolocation Denied warning block */}
+      {gpsPermissionStatus === 'denied' && (
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-750 flex flex-col md:flex-row md:items-center justify-between text-left font-semibold gap-3">
+          <div className="flex items-start space-x-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-650 mt-0.5" />
+            <span>Location permission is required to find food along your route. Please enable device GPS permissions.</span>
+          </div>
+          <button onClick={handleUseCurrentLocation} className="btn-secondary whitespace-nowrap px-3 py-1.5 text-[10px] self-end md:self-auto uppercase font-black">
+            Enable Location
+          </button>
+        </div>
+      )}
+
       {/* Status Notifications */}
+      {gpsAccuracyWarning && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-250 text-xs text-amber-850 flex items-start space-x-2.5 font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0 text-amber-650 mt-0.5" />
+          <span>{gpsAccuracyWarning}</span>
+        </div>
+      )}
+
       {errorStatus && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start space-x-2.5 font-semibold">
-          <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+        <div className="p-4 rounded-xl bg-red-55/10 border border-red-200 text-xs text-red-750 flex items-start space-x-2.5 font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0 text-red-650 mt-0.5" />
           <span>{errorStatus}</span>
         </div>
       )}
 
       {successStatus && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-250 text-xs text-emerald-800 flex items-start space-x-2.5 font-semibold">
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-start space-x-2.5 font-semibold">
           <CheckCircle className="w-4 h-4 shrink-0 text-emerald-700 mt-0.5" />
           <span>{successStatus}</span>
         </div>
@@ -477,63 +620,82 @@ export const FindMatchingFood: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           
           <div className="lg:col-span-5 space-y-5 flex flex-col justify-between">
-            <form onSubmit={handleStartRoute} className="bg-white border border-natural-border p-5 md:p-6 rounded-2xl shadow-xs space-y-4 flex-1">
+            <form onSubmit={handleStartRoute} className="bg-white border border-natural-border p-5 md:p-6 rounded-2xl shadow-xs space-y-4 flex-1 relative">
               <div className="border-b border-natural-border pb-3">
-                <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Start A Temporary Route</h3>
-                <p className="text-[10px] text-natural-muted mt-0.5 font-semibold">Pin your origin and target destinations to filter donations.</p>
+                <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text font-display">Start my journey</h3>
+                <p className="text-[10px] text-natural-muted mt-0.5 font-semibold">Specify your origin and search for a destination from Nominatim autocomplete.</p>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Starting Point Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={startName}
-                    onChange={(e) => setStartName(e.target.value)}
-                    className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
-                    placeholder="E.g. Indiranagar Metro"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setPickingLocation('START')}
-                    className={`mt-2 w-full text-center text-[9px] py-2 border rounded-lg font-black transition-all uppercase tracking-wider ${
-                      pickingLocation === 'START'
-                        ? 'border-brand-600 bg-brand-50 text-brand-700'
-                        : 'border-gray-200 bg-gray-50 text-natural-muted hover:bg-gray-100'
-                    }`}
-                  >
-                    {startLat ? '✓ Starting Point Coords Captured' : '📍 Pin Starting Point on Map'}
-                  </button>
+                  <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Current Location</label>
+                  <div className="flex gap-2 mt-1.5">
+                    <input
+                      type="text"
+                      required
+                      value={startName}
+                      onChange={(e) => setStartName(e.target.value)}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
+                      placeholder="Origin Address"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleUseCurrentLocation}
+                      className="px-3 py-2 bg-brand-50 border border-brand-200 hover:bg-brand-100 text-brand-700 text-xs rounded-lg font-bold whitespace-nowrap"
+                    >
+                      GPS
+                    </button>
+                  </div>
+                  {startLat && (
+                    <span className="text-[8px] font-mono text-brand-600 mt-1 block">
+                      Origin coordinate locked: {startLat.toFixed(5)}, {startLng?.toFixed(5)}
+                    </span>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Destination Point Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={endName}
-                    onChange={(e) => setEndName(e.target.value)}
-                    className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
-                    placeholder="E.g. Koramangala Community Zone"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setPickingLocation('END')}
-                    className={`mt-2 w-full text-center text-[9px] py-2 border rounded-lg font-black transition-all uppercase tracking-wider ${
-                      pickingLocation === 'END'
-                        ? 'border-brand-600 bg-brand-50 text-brand-700'
-                        : 'border-gray-200 bg-gray-50 text-natural-muted hover:bg-gray-100'
-                    }`}
-                  >
-                    {endLat ? '✓ Destination Coords Captured' : '📍 Pin Destination on Map'}
-                  </button>
+                {/* Autocomplete Destination Search Box */}
+                <div className="relative">
+                  <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Search Destination</label>
+                  <div className="relative mt-1.5">
+                    <input
+                      type="text"
+                      required
+                      value={destinationSearch}
+                      onChange={(e) => setDestinationSearch(e.target.value)}
+                      className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
+                      placeholder="Type destination area name..."
+                    />
+                    <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    {loadingSuggestions && (
+                      <Loader2 className="w-3.5 h-3.5 text-brand-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
+                    )}
+                  </div>
+
+                  {destinationSuggestions.length > 0 && (
+                    <div className="absolute left-0 right-0 z-50 bg-white border border-natural-border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-100 text-xs">
+                      {destinationSuggestions.map((sug, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => handleSelectSuggestion(sug)}
+                          className="p-2.5 hover:bg-brand-50/50 cursor-pointer transition-colors text-[11px] text-natural-text truncate"
+                        >
+                          {sug.display_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {endLat && (
+                    <span className="text-[8px] font-mono text-brand-600 mt-1 block">
+                      Destination coordinate locked: {endLat.toFixed(5)}, {endLng?.toFixed(5)}
+                    </span>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted flex justify-between">
-                    <span>Max detour travel detour</span>
-                    <span className="font-mono text-brand-650 font-black">{maxDeviation} km</span>
+                    <span>Max detour deviation</span>
+                    <span className="font-mono text-brand-600 font-black">{maxDeviation} km</span>
                   </label>
                   <input
                     type="range"
@@ -547,47 +709,30 @@ export const FindMatchingFood: React.FC = () => {
                 </div>
               </div>
 
+              {/* OSRM Route geometry stats */}
+              {routeDistance !== null && (
+                <div className="p-3 bg-[#FAF9F5] border border-natural-border rounded-xl space-y-1 text-[10px] text-natural-muted font-bold font-mono">
+                  <div className="flex justify-between">
+                    <span>Plan route distance:</span>
+                    <span className="text-natural-text">{routeDistance.toFixed(2)} km</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Plan route duration:</span>
+                    <span className="text-natural-text">{Math.round(routeDuration || 0)} mins</span>
+                  </div>
+                </div>
+              )}
+
               <div className="pt-4 border-t border-natural-border">
                 <button
                   type="submit"
-                  disabled={startingRoute}
+                  disabled={startingRoute || loadingRouteGeometry}
                   className="btn-primary w-full flex justify-center text-[10px]"
                 >
-                  {startingRoute ? 'Syncing Route Layout...' : 'Start Matching Journeys'}
+                  {startingRoute ? 'Syncing Route Layout...' : 'Start my journey'}
                 </button>
               </div>
             </form>
-
-            <div className="p-4 bg-[#FAF9F5] border border-natural-border rounded-xl text-xs text-natural-muted font-semibold leading-relaxed">
-              <strong className="text-natural-text block mb-1">💡 Quick Route Simulator Presets:</strong>
-              Use these shortcuts to seed coordinate configurations:
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStartName("Indiranagar");
-                    setEndName("Koramangala");
-                    setStartLat(12.97189); setStartLng(77.64115);
-                    setEndLat(12.9343); setEndLng(77.6253);
-                  }}
-                  className="p-2 border border-gray-300 bg-white hover:bg-brand-50 hover:text-brand-750 text-[8px] rounded-lg font-black uppercase tracking-wider transition-all"
-                >
-                  Indiranagar ➔ Koramangala
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStartName("Malleshwaram");
-                    setEndName("Jayanagar");
-                    setStartLat(13.0031); setStartLng(77.5643);
-                    setEndLat(12.9307); setEndLng(77.5832);
-                  }}
-                  className="p-2 border border-gray-300 bg-white hover:bg-brand-50 hover:text-brand-750 text-[8px] rounded-lg font-black uppercase tracking-wider transition-all"
-                >
-                  Malleshwaram ➔ Jayanagar
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* Interactive Route Pins map view */}
@@ -595,18 +740,16 @@ export const FindMatchingFood: React.FC = () => {
             <div className="p-3 bg-brand-50 border border-brand-100 rounded-xl mb-4 text-xs font-semibold text-brand-850 flex items-start space-x-2">
               <Compass className="w-4 h-4 shrink-0 text-brand-750 mt-0.5" />
               <span>
-                {pickingLocation 
-                  ? `Click anywhere on the map grid to set the coordinates for your ${pickingLocation} point.`
-                  : 'Pin points on the map or select a quick route preset on the left to start matching.'}
+                Origin is set to your device GPS location. Search for a destination to preview the actual route path geometry.
               </span>
             </div>
             <div className="flex-1 rounded-2xl overflow-hidden border border-natural-border min-h-[350px]">
               <MapView
-                center={[12.9716, 77.5946]}
+                center={[startLat || 12.9716, startLng || 77.5946]}
                 zoom={12}
-                onLocationSelect={handleCoordinatesPick}
                 markers={getMapMarkers()}
-                polylinePoints={getMapPolyline()}
+                polylinePoints={routeGeometryPoints}
+                interactive={false}
               />
             </div>
           </div>
@@ -619,18 +762,20 @@ export const FindMatchingFood: React.FC = () => {
           {/* Active Route overview banner */}
           <div className="bg-white border border-natural-border rounded-xl p-5 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
             <div className="flex items-center space-x-3.5">
-              <div className="w-10 h-10 rounded-full bg-brand-50 border border-brand-100 text-brand-650 flex items-center justify-center font-bold">
-                <Navigation className="w-5 h-5 shrink-0" />
+              <div className="w-10 h-10 rounded-full bg-brand-50 border border-brand-100 text-brand-600 flex items-center justify-center font-bold">
+                <Navigation className="w-5 h-5 shrink-0 animate-bounce" />
               </div>
               <div>
-                <span className="text-[9px] uppercase font-bold text-natural-muted tracking-wider font-mono">Active Transit Path</span>
-                <h3 className="font-display font-black text-sm text-natural-text mt-0.5 flex items-center gap-1.5 uppercase">
-                  {activeRoute.startName} <ArrowRight className="w-3.5 h-3.5 text-natural-muted" /> {activeRoute.endName}
+                <span className="text-[9px] uppercase font-bold text-natural-muted tracking-wider font-mono">YOUR JOURNEY</span>
+                <h3 className="font-display font-black text-xs text-natural-text mt-0.5 flex items-center gap-1.5 uppercase leading-normal">
+                  <span className="truncate max-w-[150px] inline-block">{activeRoute.startName}</span> 
+                  <ArrowRight className="w-3.5 h-3.5 text-natural-muted shrink-0" /> 
+                  <span className="truncate max-w-[150px] inline-block">{activeRoute.endName}</span>
                 </h3>
-                <div className="text-[10px] text-natural-muted mt-0.5 font-bold uppercase tracking-wider flex flex-wrap items-center gap-2 font-mono">
-                  <span>Detour Range Limit: {activeRoute.maxDeviation} km</span>
+                <div className="text-[9px] text-natural-muted mt-0.5 font-bold uppercase tracking-wider flex flex-wrap items-center gap-2 font-mono">
+                  <span>Detour Limit: {activeRoute.maxDeviation} km</span>
                   <span>•</span>
-                  <span>GPS Coordinate: {currentLat.toFixed(5)}, {currentLng.toFixed(5)}</span>
+                  <span>Current GPS: {currentLat?.toFixed(5)}, {currentLng?.toFixed(5)}</span>
                   {gpsAccuracy && (
                     <>
                       <span>•</span>
@@ -653,7 +798,7 @@ export const FindMatchingFood: React.FC = () => {
               <button
                 type="button"
                 onClick={handleCancelActiveRoute}
-                className="px-3.5 py-2 text-xs font-bold text-red-750 bg-red-50 hover:bg-red-100 border border-red-150 rounded-lg transition-all uppercase tracking-wider flex items-center gap-1"
+                className="px-3.5 py-2 text-xs font-bold text-red-755 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-all uppercase tracking-wider flex items-center gap-1"
               >
                 <Trash2 className="w-3.5 h-3.5 shrink-0" /> Stop Route
               </button>
@@ -669,35 +814,35 @@ export const FindMatchingFood: React.FC = () => {
                   <Compass className="w-4 h-4 text-brand-600 animate-pulse" /> Active Route Tracker
                 </span>
                 <span className="text-[10px] bg-brand-50 text-brand-850 px-2 py-0.5 rounded font-mono font-bold uppercase border border-brand-100">
-                  {isSimulated ? 'Simulated Coords' : 'Live Hardware GPS stream'}
+                  Live Hardware GPS stream
                 </span>
               </div>
 
               <div className="flex-1 relative rounded-xl overflow-hidden border border-natural-border min-h-[300px]">
                 <MapView
-                  center={[currentLat, currentLng]}
+                  center={[currentLat || 12.9716, currentLng || 77.5946]}
                   zoom={12}
-                  onLocationSelect={handleSimulateGPS}
                   markers={getMapMarkers()}
-                  polylinePoints={getMapPolyline()}
+                  polylinePoints={routeGeometryPoints}
+                  interactive={false}
                 />
               </div>
               
               <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border mt-3 text-[10px] text-natural-muted font-bold text-left leading-normal">
-                📍 <strong>Live GPS Simulator:</strong> Click anywhere on the map or drag markers to simulate movement. Matches detours will automatically update in real time based on your position.
+                📍 <strong>Live GPS Updates:</strong> Geolocation updates will continuously stream from your browser device sensor to map matching algorithms.
               </div>
             </div>
 
             {/* Recommendations matching list ledger */}
             <div className="lg:col-span-5 bg-white border border-natural-border rounded-2xl shadow-xs flex flex-col overflow-hidden max-h-[560px]">
               <div className="p-4 border-b border-natural-border bg-[#FAF9F5]">
-                <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Compatible Surplus Listings</h3>
-                <p className="text-[10px] text-natural-muted mt-0.5 font-bold">Surplus donations with detours fitting inside your active journey</p>
+                <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text font-display">FOOD ALONG YOUR ROUTE</h3>
+                <p className="text-[10px] text-natural-muted mt-0.5 font-bold">Surplus donations with detours fitting inside your active journey corridor</p>
               </div>
 
               {loadingMatches ? (
                 <div className="p-12 text-center text-natural-muted flex flex-col items-center justify-center space-y-2.5 flex-1">
-                  <div className="w-7 h-7 rounded-full border-3 border-brand-200 border-t-brand-650 animate-spin"></div>
+                  <div className="w-7 h-7 rounded-full border-3 border-brand-200 border-t-brand-600 animate-spin"></div>
                   <span className="text-xs font-semibold">Running route matching scoring...</span>
                 </div>
               ) : matches.length === 0 ? (
@@ -707,40 +852,49 @@ export const FindMatchingFood: React.FC = () => {
                   </div>
                   <p className="text-xs font-bold text-center text-natural-text">No surplus donations currently match your route detour bounds.</p>
                   <p className="text-[10px] text-center font-semibold leading-relaxed">
-                    New matching deliveries will appear automatically when restaurants publish surplus food nearby.
+                    Unrelated cities or listings outside the corridor are filtered out geographically.
                   </p>
-                  <div className="w-6 h-6 border-2 border-brand-200 border-t-brand-600 rounded-full animate-spin mt-2"></div>
                 </div>
               ) : (
                 <div className="divide-y divide-natural-border overflow-y-auto flex-1 bg-white">
                   {matches.map((rec) => {
-                    const pickupDist = rec.foodListing.pickupLatitude 
-                      ? Math.round(Math.sqrt(
-                          Math.pow(currentLat - rec.foodListing.pickupLatitude, 2) +
-                          Math.pow(currentLng - rec.foodListing.pickupLongitude, 2)
-                        ) * 111.3 * 10) / 10
+                    const pickupDist = currentLat !== null && currentLng !== null 
+                      ? calculateDistance(currentLat, currentLng, rec.foodListing.pickupLatitude, rec.foodListing.pickupLongitude)
                       : 0.0;
-                    
                     const expectedCoins = getExpectedReward(rec);
                     const isExpanded = expandedRecId === rec.foodListing.id;
+                    
+                    let matchQuality = "Excellent match";
+                    if (rec.matchingScore < 70) {
+                      matchQuality = "Fair match";
+                    } else if (rec.matchingScore < 85) {
+                      matchQuality = "Good match";
+                    }
 
                     return (
                       <div 
                         key={rec.foodListing.id} 
-                        className="p-4 hover:bg-brand-50/10 transition-all flex flex-col gap-3 text-xs text-natural-text border-b border-natural-border last:border-b-0"
+                        className="p-4 hover:bg-brand-50/5 transition-all flex flex-col gap-3 text-xs text-natural-text border-b border-natural-border last:border-b-0"
                       >
                         <div className="flex gap-3">
                           <div className="flex-1 space-y-2 text-left">
                             <div className="flex flex-wrap items-center gap-1">
                               <span className="text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-black uppercase font-mono">
-                                {rec.matchingScore}% Match
+                                ★ {rec.matchingScore}% {matchQuality}
                               </span>
                               <span className="text-[8px] bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5 rounded font-bold font-mono">
                                 Detour: {rec.deviation.toFixed(1)} km
                               </span>
                               <span className="text-[8px] bg-brand-100 text-brand-850 px-1.5 py-0.5 rounded font-bold font-mono">
-                                Pickup: {pickupDist.toFixed(1)} km away
+                                Pickup: {(rec.distanceToVolunteer !== undefined && rec.distanceToVolunteer !== null ? rec.distanceToVolunteer : pickupDist).toFixed(1)} km away
                               </span>
+                              {(rec as any).positionStatus && (
+                                <span className={`text-[8px] border px-1.5 py-0.5 rounded font-black uppercase font-mono ${
+                                  (rec as any).isAhead ? 'bg-emerald-55/10 text-emerald-800 border-emerald-250' : 'bg-rose-50 text-rose-700 border-rose-250'
+                                }`}>
+                                  {(rec as any).positionStatus}
+                                </span>
+                              )}
                             </div>
 
                             <div>
@@ -755,8 +909,8 @@ export const FindMatchingFood: React.FC = () => {
                               </div>
                               <div>
                                 <span className="block text-[8px] uppercase tracking-wider text-natural-muted font-sans">Expiry Window</span>
-                                <span className="block text-red-650 font-extrabold flex items-center gap-0.5">
-                                  <Clock className="w-3 h-3 text-red-600" />
+                                <span className="block text-red-600 font-extrabold flex items-center gap-0.5">
+                                  <Clock className="w-3 h-3 text-red-500" />
                                   {new Date(rec.foodListing.expiryTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                               </div>
@@ -780,16 +934,12 @@ export const FindMatchingFood: React.FC = () => {
                                 <span className="font-bold text-natural-text">{rec.matchingScore - 15}% overlap</span>
                               </div>
                               <div className="flex items-center justify-between">
-                                <span>✓ Low additional travel detour</span>
+                                <span>✓ Low additional detour deviation</span>
                                 <span className="font-bold text-natural-text">+{rec.deviation.toFixed(1)} km detour</span>
                               </div>
                               <div className="flex items-center justify-between">
                                 <span>✓ Expiry Safety Window</span>
                                 <span className="font-bold text-natural-text">Ready for pickup</span>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <span>✓ High Priority receiving shelter</span>
-                                <span className="font-bold text-natural-text">Demand priority high</span>
                               </div>
                             </div>
                           )}
@@ -798,8 +948,8 @@ export const FindMatchingFood: React.FC = () => {
                         {/* Accept Button Container */}
                         <div className="pt-2 border-t border-natural-border flex items-center justify-between gap-3 bg-white">
                           <div className="text-left">
-                            <span className="text-[8px] uppercase font-black text-brand-700 tracking-wider font-mono block">Coin payout</span>
-                            <strong className="text-xs font-black text-brand-650 font-mono">🪙 {expectedCoins} pts</strong>
+                            <span className="text-[8px] uppercase font-bold text-brand-700 tracking-wider font-mono block">Coin payout</span>
+                            <strong className="text-xs font-black text-brand-600 font-mono">🪙 {expectedCoins} pts</strong>
                           </div>
                           <button
                             type="button"

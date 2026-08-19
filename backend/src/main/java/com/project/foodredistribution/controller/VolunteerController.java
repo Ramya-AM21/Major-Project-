@@ -2,6 +2,7 @@ package com.project.foodredistribution.controller;
 
 import com.project.foodredistribution.dto.TaskMatchRecommendation;
 import com.project.foodredistribution.entity.VolunteerRoute;
+import com.project.foodredistribution.entity.TokenTransaction;
 import com.project.foodredistribution.service.VolunteerService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -46,13 +47,28 @@ public class VolunteerController {
     }
 
     @PutMapping("/routes/{routeId}/location")
-    public ResponseEntity<VolunteerRoute> updateRouteLocation(@PathVariable UUID routeId, @RequestBody java.util.Map<String, Double> payload, Principal principal) {
-        Double latitude = payload.get("latitude");
-        Double longitude = payload.get("longitude");
-        if (latitude == null || longitude == null) {
+    public ResponseEntity<VolunteerRoute> updateRouteLocation(@PathVariable UUID routeId, @RequestBody java.util.Map<String, Object> payload, Principal principal) {
+        Object latObj = payload.get("latitude");
+        Object lngObj = payload.get("longitude");
+        if (latObj == null || lngObj == null) {
             return ResponseEntity.badRequest().build();
         }
-        VolunteerRoute updated = volunteerService.updateRouteLocation(routeId, latitude, longitude, principal.getName());
+        Double latitude = ((Number) latObj).doubleValue();
+        Double longitude = ((Number) lngObj).doubleValue();
+
+        Object accObj = payload.get("accuracy");
+        Double accuracy = null;
+        if (accObj != null) {
+            accuracy = ((Number) accObj).doubleValue();
+        }
+
+        Object timeObj = payload.get("timestamp");
+        String timestamp = null;
+        if (timeObj != null) {
+            timestamp = timeObj.toString();
+        }
+
+        VolunteerRoute updated = volunteerService.updateRouteLocation(routeId, latitude, longitude, accuracy, timestamp, principal.getName());
         return ResponseEntity.ok(updated);
     }
 
@@ -65,7 +81,25 @@ public class VolunteerController {
         }
         Double latitude = ((Number) latObj).doubleValue();
         Double longitude = ((Number) lngObj).doubleValue();
-        volunteerService.updateVolunteerLocation(latitude, longitude, principal.getName());
+
+        Object accObj = payload.get("accuracy");
+        Double accuracy = null;
+        if (accObj != null) {
+            accuracy = ((Number) accObj).doubleValue();
+        }
+
+        Object timeObj = payload.get("timestamp");
+        String timestamp = null;
+        if (timeObj != null) {
+            timestamp = timeObj.toString();
+        }
+
+        volunteerService.updateVolunteerLocation(latitude, longitude, accuracy, timestamp, principal.getName());
         return ResponseEntity.ok().build();
+    }
+ 
+    @GetMapping("/wallet/transactions")
+    public ResponseEntity<List<TokenTransaction>> getWalletTransactions(Principal principal) {
+        return ResponseEntity.ok(volunteerService.getWalletTransactions(principal.getName()));
     }
 }

@@ -171,7 +171,7 @@ def test_scenario():
     import datetime
     now = datetime.datetime.utcnow()
     prep_time = now.isoformat() + "Z"
-    expiry_time = (now + datetime.timedelta(hours=3)).isoformat() + "Z"
+    expiry_time = (now + datetime.timedelta(hours=12)).isoformat() + "Z"
     
     listing_a_payload = {
         "foodName": "Mysore Veg Thali",

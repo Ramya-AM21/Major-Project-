@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { MapView } from '../components/MapView';
 import { 
   CheckCircle2, AlertTriangle, Truck, MapPin, Navigation, Clock, ShieldAlert, Award, 
   AlertCircle, Camera, Heart, Trophy, Sparkles, ChevronRight, Activity, Calendar, ShieldCheck, Check,
-  RefreshCw, Map, User, ShoppingBag, Eye, HelpCircle, ArrowRight
+  RefreshCw, Map, User, ShoppingBag, Eye, HelpCircle, ArrowRight, Compass, ChevronDown, ChevronUp, Loader2
 } from 'lucide-react';
 import axios from 'axios';
 import volunteerCommuteImg from '../assets/volunteer_commute.png';
@@ -108,15 +108,20 @@ export const VolunteerDashboard: React.FC = () => {
   const [deliveryOtp, setDeliveryOtp] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [submittingProof, setSubmittingProof] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
   
   // Geolocation settings
-  const [currentLat, setCurrentLat] = useState<number>(12.9716);
-  const [currentLng, setCurrentLng] = useState<number>(77.5946);
-  const [isSimulated, setIsSimulated] = useState<boolean>(false);
+  const [currentLat, setCurrentLat] = useState<number | null>(null);
+  const [currentLng, setCurrentLng] = useState<number | null>(null);
   const [gpsPermissionStatus, setGpsPermissionStatus] = useState<'granted' | 'denied' | 'unavailable' | 'checking'>('checking');
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [selectedRecId, setSelectedRecId] = useState<string | null>(null);
+  const [gpsAccuracyWarning, setGpsAccuracyWarning] = useState<string | null>(null);
+  const lastUploadedCoords = useRef<{ lat: number; lng: number; time: number } | null>(null);
   const [tGpsExpanded, setTGpsExpanded] = useState<boolean>(false);
+
+  // OSRM route geometry states
+  const [routeGeometryPoints, setRouteGeometryPoints] = useState<[number, number][]>([]);
+  const [loadingRouteGeometry, setLoadingRouteGeometry] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
@@ -134,21 +139,12 @@ export const VolunteerDashboard: React.FC = () => {
     return R * c;
   };
 
-  const getExpectedReward = (rec: MatchRecommendation) => {
-    const base = 10;
-    const qty = rec.foodListing.quantity >= 50 ? 5 : rec.foodListing.quantity >= 30 ? 3 : rec.foodListing.quantity >= 10 ? 2 : 1;
-    const dev = rec.deviation < 2.0 ? 3 : rec.deviation < 5.0 ? 2 : 1;
-    const ver = 3; 
-    return base + qty + dev + ver;
-  };
-
   const getExpectedRewardForTask = (task: any) => {
     if (!task) return 10;
     const base = 10;
     const qty = task.foodListing.quantity >= 50 ? 5 : task.foodListing.quantity >= 30 ? 3 : task.foodListing.quantity >= 10 ? 2 : 1;
     const dev = task.routeDeviation < 2.0 ? 3 : task.routeDeviation < 5.0 ? 2 : 1;
-    const ver = 3; 
-    return base + qty + dev + ver;
+    return base + qty + dev + 3;
   };
 
   const formatTime = (timeStr: string) => {
@@ -158,6 +154,30 @@ export const VolunteerDashboard: React.FC = () => {
     } catch (e) {
       return timeStr;
     }
+  };
+
+  // Browser Geolocation capture loop
+  const handleRequestLocation = () => {
+    setGpsPermissionStatus('checking');
+    if (!navigator.geolocation) {
+      setGpsPermissionStatus('unavailable');
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        setGpsPermissionStatus('granted');
+        setCurrentLat(latitude);
+        setCurrentLng(longitude);
+        setGpsAccuracy(accuracy);
+      },
+      (error) => {
+        setGpsPermissionStatus('denied');
+        setErrorStatus("Location permission is required for live delivery tracking.");
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
   };
 
   // Sync general user statistics and metadata
@@ -179,7 +199,7 @@ export const VolunteerDashboard: React.FC = () => {
       setHistoryTasks(compTasks);
 
       const flightTask = tasksRes.data.find(
-        (t: any) => t.status !== 'COMPLETED' && t.status !== 'CREATED' && t.status !== 'MATCHED'
+        (t: any) => t.status !== 'COMPLETED' && t.status !== 'CREATED' && t.status !== 'MATCHED' && t.status !== 'CANCELLED'
       );
 
       // Transition check to show success reward popup screen
@@ -201,11 +221,6 @@ export const VolunteerDashboard: React.FC = () => {
       setActiveTask(flightTask || null);
 
       if (flightTask) {
-        if (currentLat === 12.9716 && currentLng === 77.5946 && !isSimulated) {
-          // Snap position close to pickup coordinates initially for convenience
-          setCurrentLat(flightTask.foodListing.pickupLatitude - 0.002);
-          setCurrentLng(flightTask.foodListing.pickupLongitude - 0.002);
-        }
         try {
           const verRes = await axios.get(`/api/v1/verification/task/${flightTask.id}`);
           setVerificationData(verRes.data);
@@ -223,36 +238,8 @@ export const VolunteerDashboard: React.FC = () => {
     }
   };
 
-  // Request/Watch Location Coordinates
-  const requestLocationAccess = () => {
-    setGpsPermissionStatus('checking');
-    if (!navigator.geolocation) {
-      setGpsPermissionStatus('unavailable');
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        setGpsPermissionStatus('granted');
-        if (!isSimulated) {
-          setCurrentLat(latitude);
-          setCurrentLng(longitude);
-        }
-      },
-      (error) => {
-        if (error.code === error.PERMISSION_DENIED) {
-          setGpsPermissionStatus('denied');
-        } else {
-          setGpsPermissionStatus('unavailable');
-        }
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
-  };
-
   useEffect(() => {
-    requestLocationAccess();
+    handleRequestLocation();
     fetchVolunteerData();
 
     const timer = setInterval(() => setNowTime(new Date()), 1000);
@@ -294,28 +281,115 @@ export const VolunteerDashboard: React.FC = () => {
       if (ws) ws.close();
     };
   }, [activeTask?.id]);
-
-  // General Geolocation update stream when coordinates shift
+  // Background location watch hook for active tasks
   useEffect(() => {
-    if (!activeTask || (activeTask.status !== 'ACCEPTED' && activeTask.status !== 'NAVIGATING_TO_PICKUP' && activeTask.status !== 'ARRIVED_AT_PICKUP' && activeTask.status !== 'PICKED_UP' && activeTask.status !== 'NAVIGATING_TO_DESTINATION' && activeTask.status !== 'ARRIVED_AT_DESTINATION')) return;
+    if (!activeTask) return;
 
-    // Report location coordinates immediately
-    axios.post(`/api/v1/tasks/${activeTask.id}/location`, {
-      latitude: currentLat,
-      longitude: currentLng
-    }).catch(err => console.error("Error setting initial transit coordinates:", err));
+    let watchId: number | null = null;
+    if (navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          setCurrentLat(latitude);
+          setCurrentLng(longitude);
+          setGpsAccuracy(accuracy);
+          setGpsPermissionStatus('granted');
 
-    const telemetryTimer = setInterval(() => {
-      axios.post(`/api/v1/tasks/${activeTask.id}/location`, {
-        latitude: currentLat,
-        longitude: currentLng
-      }).catch(err => console.error("Error posting transit telemetry:", err));
-    }, 6000);
+          if (accuracy > 50) {
+            setGpsAccuracyWarning(`GPS accuracy is low (${Math.round(accuracy)}m). Ignoring update.`);
+            return;
+          } else {
+            setGpsAccuracyWarning(null);
+          }
 
-    return () => clearInterval(telemetryTimer);
+          const now = Date.now();
+          if (lastUploadedCoords.current) {
+            const dist = calculateDistance(
+              lastUploadedCoords.current.lat,
+              lastUploadedCoords.current.lng,
+              latitude,
+              longitude
+            ) * 1000; // in meters
+            const timeElapsed = now - lastUploadedCoords.current.time;
+
+            if (dist < 15 && timeElapsed < 5000) {
+              return;
+            }
+          }
+
+          lastUploadedCoords.current = { lat: latitude, lng: longitude, time: now };
+          const timestamp = new Date().toISOString();
+
+          // Report location coordinates immediately
+          axios.post(`/api/v1/tasks/${activeTask.id}/location`, {
+            latitude,
+            longitude,
+            accuracy,
+            timestamp
+          }).catch(err => console.error("Error posting transit telemetry:", err));
+        },
+        (err) => console.warn("GPS watching failed", err),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+
+    return () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [activeTask?.id]);
+  // OSRM routing geometry calculation for active tasks
+  useEffect(() => {
+    if (!activeTask || currentLat === null || currentLng === null) {
+      setRouteGeometryPoints([]);
+      return;
+    }
+
+    const fetchActiveOSRMRoute = async () => {
+      setLoadingRouteGeometry(true);
+      try {
+        const pickupLat = activeTask.foodListing.pickupLatitude;
+        const pickupLng = activeTask.foodListing.pickupLongitude;
+        const zoneLat = activeTask.zone.latitude;
+        const zoneLng = activeTask.zone.longitude;
+
+        let waypoints = `${currentLng},${currentLat};${pickupLng},${pickupLat};${zoneLng},${zoneLat}`;
+        if (activeTask.status === 'NAVIGATING_TO_DESTINATION' || activeTask.status === 'PICKED_UP' || activeTask.status === 'ARRIVED_AT_DESTINATION') {
+          waypoints = `${currentLng},${currentLat};${zoneLng},${zoneLat}`;
+        }
+
+        const res = await axios.get(`https://router.project-osrm.org/route/v1/driving/${waypoints}`, {
+          params: {
+            overview: 'full',
+            geometries: 'geojson'
+          }
+        });
+        if (res.data && res.data.routes && res.data.routes.length > 0) {
+          const coordinates = res.data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]] as [number, number]);
+          setRouteGeometryPoints(coordinates);
+        }
+      } catch (err) {
+        console.warn("Active route OSRM calculation failed", err);
+        // Fallback straight lines
+        if (activeTask.status === 'NAVIGATING_TO_DESTINATION' || activeTask.status === 'PICKED_UP' || activeTask.status === 'ARRIVED_AT_DESTINATION') {
+          setRouteGeometryPoints([ [currentLat, currentLng], [activeTask.zone.latitude, activeTask.zone.longitude] ]);
+        } else {
+          setRouteGeometryPoints([
+            [currentLat, currentLng],
+            [activeTask.foodListing.pickupLatitude, activeTask.foodListing.pickupLongitude],
+            [activeTask.zone.latitude, activeTask.zone.longitude]
+          ]);
+        }
+      } finally {
+        setLoadingRouteGeometry(false);
+      }
+    };
+
+    fetchActiveOSRMRoute();
   }, [activeTask?.id, activeTask?.status, currentLat, currentLng]);
 
-  // State Machine transition: ACCEPT -> start pickup route
+  // State Machine transition: start pickup route
   const handleStartPickup = async () => {
     if (!activeTask) return;
     try {
@@ -327,7 +401,7 @@ export const VolunteerDashboard: React.FC = () => {
     }
   };
 
-  // State Machine transition: arrived at kitchen (manual button bypass/override)
+  // State Machine transition: arrived at kitchen
   const handleArrivePickup = async () => {
     if (!activeTask) return;
     try {
@@ -351,7 +425,7 @@ export const VolunteerDashboard: React.FC = () => {
     }
   };
 
-  // State Machine transition: arrived at shelter (manual button bypass/override)
+  // State Machine transition: arrived at shelter
   const handleArriveDelivery = async () => {
     if (!activeTask) return;
     try {
@@ -381,8 +455,12 @@ export const VolunteerDashboard: React.FC = () => {
     }
   };
 
+  // Verify pickup geofence and OTP (Real device GPS coordinates passed)
   const handleVerifyPickup = async () => {
-    if (!pickupOtp || !activeTask) return;
+    if (!pickupOtp || !activeTask || currentLat === null) {
+      setErrorStatus("Need device coordinates before verifying pickup geofence.");
+      return;
+    }
     setErrorStatus(null);
     try {
       await axios.post('/api/v1/verification/pickup', {
@@ -394,12 +472,16 @@ export const VolunteerDashboard: React.FC = () => {
       setPickupOtp('');
       fetchVolunteerData();
     } catch (err: any) {
-      setErrorStatus(err.response?.data?.message || 'Verification failed. Please check kitchen OTP.');
+      setErrorStatus(err.response?.data?.message || 'Verification failed. Please check kitchen OTP and geofence proximity.');
     }
   };
 
+  // Verify delivery geofence and OTP (Real coordinates passed)
   const handleVerifyDelivery = async () => {
-    if (!deliveryOtp || !activeTask) return;
+    if (!deliveryOtp || !activeTask || currentLat === null) {
+      setErrorStatus("Need device coordinates before verifying destination geofence.");
+      return;
+    }
     setErrorStatus(null);
     try {
       await axios.post('/api/v1/verification/delivery', {
@@ -412,7 +494,7 @@ export const VolunteerDashboard: React.FC = () => {
       setDeliveryOtp('');
       fetchVolunteerData();
     } catch (err: any) {
-      setErrorStatus(err.response?.data?.message || 'Verification failed. Please check coordinator OTP.');
+      setErrorStatus(err.response?.data?.message || 'Verification failed. Please check coordinator OTP and geofence proximity.');
     }
   };
 
@@ -423,7 +505,10 @@ export const VolunteerDashboard: React.FC = () => {
   };
 
   const handleSubmitProof = async () => {
-    if (!selectedFile || !activeTask) return;
+    if (!selectedFile || !activeTask || currentLat === null || currentLng === null) {
+      setErrorStatus("Need device coordinates before uploading proof.");
+      return;
+    }
     setSubmittingProof(true);
     setErrorStatus(null);
     try {
@@ -444,25 +529,6 @@ export const VolunteerDashboard: React.FC = () => {
       setErrorStatus(err.response?.data?.message || "Delivery photo verification audit failed.");
     } finally {
       setSubmittingProof(false);
-    }
-  };
-
-  const handleSimulateGPS = (lat: number, lng: number) => {
-    setIsSimulated(true);
-    setCurrentLat(lat);
-    setCurrentLng(lng);
-    setErrorStatus(null);
-    axios.post('/api/v1/volunteers/location', {
-      latitude: lat,
-      longitude: lng,
-      timestamp: new Date().toISOString()
-    }).catch(err => console.warn("Failed to send simulated coordinates:", err));
-
-    if (activeTask) {
-      axios.post(`/api/v1/tasks/${activeTask.id}/location`, {
-        latitude: lat,
-        longitude: lng
-      }).catch(err => console.error("Error setting coordinate telemetry:", err));
     }
   };
 
@@ -514,28 +580,29 @@ export const VolunteerDashboard: React.FC = () => {
       { 
         label: 'Zone Geofence Unlocked', 
         desc: 'Arrived inside shelter drop-off radius', 
-        done: (status === 'ARRIVED_AT_DESTINATION' || status === 'PROOF_SUBMISSION' || status === 'AI_VALIDATION' || status === 'COMPLETED'), 
+        done: (status === 'ARRIVED_AT_DESTINATION' || status === 'PROOF_SUBMISSION' || status === 'PENDING_VERIFICATION' || status === 'AI_VALIDATION' || status === 'COMPLETED'), 
         active: status === 'ARRIVED_AT_DESTINATION' 
       },
       { 
         label: 'Handover OTP Verified', 
         desc: 'Confirm shelter drop-off verification code', 
-        done: (status === 'PROOF_SUBMISSION' || status === 'AI_VALIDATION' || status === 'COMPLETED'), 
+        done: (status === 'PROOF_SUBMISSION' || status === 'PENDING_VERIFICATION' || status === 'AI_VALIDATION' || status === 'COMPLETED'), 
         active: status === 'ARRIVED_AT_DESTINATION' 
       },
       { 
         label: 'AI validation approved', 
         desc: 'Validation audit on proof of delivery photo', 
         done: status === 'COMPLETED', 
-        active: (status === 'PROOF_SUBMISSION' || status === 'AI_VALIDATION') 
+        active: (status === 'PROOF_SUBMISSION' || status === 'PENDING_VERIFICATION' || status === 'AI_VALIDATION') 
       }
     ];
   };
 
   const getIdleMapMarkers = () => {
-    const markers: any[] = [
-      { id: 'volunteer', latitude: currentLat, longitude: currentLng, title: 'Your Position', role: 'CURRENT' as const }
-    ];
+    const markers: any[] = [];
+    if (currentLat !== null && currentLng !== null) {
+      markers.push({ id: 'volunteer', latitude: currentLat, longitude: currentLng, title: 'Your Position', role: 'CURRENT' as const });
+    }
     
     recommendations.forEach(rec => {
       markers.push({
@@ -565,17 +632,31 @@ export const VolunteerDashboard: React.FC = () => {
     [selectedRec.zone.latitude, selectedRec.zone.longitude]
   ] : [];
 
+  // Live deviation checks to show detour warning alerts if volunteer moves away
+  const distanceToPickup = activeTask && currentLat !== null && currentLng !== null
+    ? calculateDistance(currentLat, currentLng, activeTask.foodListing.pickupLatitude, activeTask.foodListing.pickupLongitude)
+    : 0.0;
+
+  const distanceToDestination = activeTask && currentLat !== null && currentLng !== null
+    ? calculateDistance(currentLat, currentLng, activeTask.zone.latitude, activeTask.zone.longitude)
+    : 0.0;
+
+  const showDetourWarning = activeTask && (
+    (activeTask.status.includes('PICKUP') && distanceToPickup > 5.0) || 
+    (activeTask.status.includes('DESTINATION') && distanceToDestination > 5.0)
+  );
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Rewards success modal */}
       {showCompletedReward && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl border border-natural-border shadow-2xl max-w-md w-full p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="w-14 h-14 bg-amber-50 border border-amber-200 text-amber-500 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-natural-border shadow-xl max-w-md w-full p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 bg-brand-50 border border-brand-100 text-brand-600 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce">
               🎉
             </div>
             <div>
-              <span className="text-[10px] uppercase tracking-widest text-brand-650 font-extrabold block">Delivery Success</span>
+              <span className="text-[10px] uppercase tracking-widest text-brand-500 font-extrabold block">Delivery Success</span>
               <h2 className="text-xl font-display font-black text-natural-text uppercase mt-1">Delivery Verified!</h2>
               <p className="text-xs text-natural-muted mt-2 font-medium">
                 Your surplus rescue of <strong>{showCompletedReward.quantity} {showCompletedReward.unit}</strong> of <strong>{showCompletedReward.foodName}</strong> has been audited and approved by our AI verification model.
@@ -611,7 +692,7 @@ export const VolunteerDashboard: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 text-[9px] font-black text-brand-700 bg-brand-50 border border-brand-100 rounded-full px-2.5 py-0.5 uppercase tracking-wider mb-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Availability: Available
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Availability: Available
             </span>
           </div>
           <h1 className="text-2xl font-display font-black text-natural-text tracking-tight uppercase">Good morning, {user?.name || 'Volunteer'}</h1>
@@ -625,33 +706,40 @@ export const VolunteerDashboard: React.FC = () => {
               {activeTask.status.replace(/_/g, ' ')}
             </span>
           )}
-          {isSimulated ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[9px] font-bold font-mono tracking-wider uppercase">
-              Simulation Active
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-800 text-[9px] font-bold font-mono tracking-wider uppercase">
-              GPS Streaming Live
-            </span>
-          )}
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-800 text-[9px] font-bold font-mono tracking-wider uppercase">
+            GPS Streaming Live
+          </span>
         </div>
       </div>
 
       {gpsPermissionStatus === 'denied' && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex flex-col md:flex-row md:items-center justify-between text-left font-semibold gap-3">
+        <div className="p-4 rounded-xl bg-red-55/15 border border-red-200 text-xs text-red-750 flex flex-col md:flex-row md:items-center justify-between text-left font-semibold gap-3">
           <div className="flex items-start space-x-2.5">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
-            <span>Location permission is required for live delivery tracking. Please enable location permissions in browser settings.</span>
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-650 mt-0.5" />
+            <span>Location permission is required to find food along your route. Please enable device location settings.</span>
           </div>
-          <button onClick={requestLocationAccess} className="btn-secondary whitespace-nowrap px-3 py-1.5 text-[10px] self-end md:self-auto">
-            Retry Access
+          <button onClick={handleRequestLocation} className="btn-secondary whitespace-nowrap px-3 py-1.5 text-[10px] self-end md:self-auto uppercase">
+            Enable Location
           </button>
         </div>
       )}
 
+      {showDetourWarning && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start space-x-2.5 text-left font-semibold animate-bounce">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+          <span>⚠ Detour warning: You are currently moving away from your active delivery route bounds ({activeTask.status.includes('PICKUP') ? distanceToPickup.toFixed(1) : distanceToDestination.toFixed(1)} km away).</span>
+        </div>
+      )}
+      {gpsAccuracyWarning && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-250 text-xs text-amber-850 flex items-start space-x-2.5 text-left font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0 text-amber-650 mt-0.5" />
+          <span>{gpsAccuracyWarning}</span>
+        </div>
+      )}
+
       {errorStatus && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start space-x-2.5 text-left font-semibold">
-          <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
+        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-755 flex items-start space-x-2.5 text-left font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0 text-red-650 mt-0.5" />
           <span>{errorStatus}</span>
         </div>
       )}
@@ -669,7 +757,7 @@ export const VolunteerDashboard: React.FC = () => {
           <div className="lg:col-span-7 bg-white border border-natural-border rounded-2xl p-4 shadow-xs flex flex-col min-h-[460px]">
             <div className="flex justify-between items-center mb-3">
               <span className="text-xs font-bold text-natural-text uppercase tracking-wider flex items-center gap-1.5">
-                <Navigation className="w-4 h-4 text-brand-600 animate-pulse" /> Live Journey Tracking
+                <Navigation className="w-4 h-4 text-brand-600" /> Live Journey Tracking
               </span>
               <span className="text-[10px] font-mono font-black text-brand-700 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded uppercase tracking-wider">
                 {activeTask.status.includes('PICKUP') || activeTask.status === 'ACCEPTED' ? 'Kitchen route' : 'Shelter route'}
@@ -678,24 +766,23 @@ export const VolunteerDashboard: React.FC = () => {
 
             <div className="flex-1 relative rounded-xl overflow-hidden border border-natural-border min-h-[300px]">
               <MapView
-                center={[currentLat, currentLng]}
+                center={[currentLat || 12.9716, currentLng || 77.5946]}
                 zoom={14}
-                onLocationSelect={handleSimulateGPS}
                 markers={[
-                  { id: 'volunteer', latitude: currentLat, longitude: currentLng, title: 'Your Position', role: 'CURRENT' },
-                  { id: 'pickup', latitude: activeTask.foodListing.pickupLatitude, longitude: activeTask.foodListing.pickupLongitude, title: 'Pickup: ' + activeTask.foodListing.foodName, role: 'PROVIDER' },
-                  { id: 'zone', latitude: activeTask.zone.latitude, longitude: activeTask.zone.longitude, title: activeTask.zone.name, role: 'ZONE' }
+                  ...(currentLat !== null ? [{ id: 'volunteer', latitude: currentLat, longitude: currentLng!, title: 'Your Position', role: 'CURRENT' as const }] : []),
+                  { id: 'pickup', latitude: activeTask.foodListing.pickupLatitude, longitude: activeTask.foodListing.pickupLongitude, title: 'Pickup: ' + activeTask.foodListing.foodName, role: 'PROVIDER' as const },
+                  { id: 'zone', latitude: activeTask.zone.latitude, longitude: activeTask.zone.longitude, title: activeTask.zone.name, role: 'ZONE' as const }
                 ]}
-                polylinePoints={[
-                  [activeTask.foodListing.pickupLatitude, activeTask.foodListing.pickupLongitude],
-                  [activeTask.zone.latitude, activeTask.zone.longitude]
-                ]}
+                polylinePoints={routeGeometryPoints}
+                interactive={false}
               />
             </div>
             
-            <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border mt-3 text-[10px] text-natural-muted font-medium text-left">
-              <strong>Simulated GPS controller: </strong> Tap anywhere on the route or map to move your volunteer coordinates and trigger geofence arrival.
-            </div>
+            {loadingRouteGeometry && (
+              <div className="text-[10px] text-brand-600 mt-2 font-bold font-mono animate-pulse">
+                ⏳ Recalculating actual road routing geometry via OSRM...
+              </div>
+            )}
           </div>
 
           {/* Verification Actions Sidebar panel */}
@@ -707,7 +794,7 @@ export const VolunteerDashboard: React.FC = () => {
                   <span className="text-[9px] font-mono font-black bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded">#FD-{activeTask.id.substring(0, 6).toUpperCase()}</span>
                 </div>
                 <h3 className="font-display font-black text-natural-text tracking-tight text-lg mt-2 flex items-center gap-2 uppercase">
-                  <Truck className="w-5 h-5 text-brand-650 shrink-0" /> {activeTask.foodListing.foodName}
+                  <Truck className="w-5 h-5 text-brand-600 shrink-0" /> {activeTask.foodListing.foodName}
                 </h3>
                 <span className="text-xs font-semibold text-natural-muted block mt-1">
                   Cargo details: {activeTask.foodListing.quantity} {activeTask.foodListing.unit}
@@ -721,12 +808,12 @@ export const VolunteerDashboard: React.FC = () => {
                   >
                     {tGpsExpanded ? 'Hide' : 'Show'} GPS Telemetry
                   </button>
-                  {tGpsExpanded && (
+                  {tGpsExpanded && currentLat !== null && (
                     <div className="mt-2 p-3 bg-[#FAF9F5] border border-natural-border rounded-xl font-mono text-[9px] text-natural-muted space-y-1.5 animate-in fade-in duration-200">
-                      <div>GPS coordinates: {currentLat.toFixed(5)}, {currentLng.toFixed(5)}</div>
+                      <div>GPS coordinates: {currentLat.toFixed(5)}, {currentLng?.toFixed(5)}</div>
                       <div>Route deviation: {activeTask.routeDeviation.toFixed(2)} km</div>
-                      <div>Shelter geofence dist: {Math.max(0.01, calculateDistance(currentLat, currentLng, activeTask.zone.latitude, activeTask.zone.longitude)).toFixed(3)} km</div>
-                      <div>Kitchen geofence dist: {Math.max(0.01, calculateDistance(currentLat, currentLng, activeTask.foodListing.pickupLatitude, activeTask.foodListing.pickupLongitude)).toFixed(3)} km</div>
+                      <div>Shelter geofence dist: {calculateDistance(currentLat, currentLng!, activeTask.zone.latitude, activeTask.zone.longitude).toFixed(3)} km</div>
+                      <div>Kitchen geofence dist: {calculateDistance(currentLat, currentLng!, activeTask.foodListing.pickupLatitude, activeTask.foodListing.pickupLongitude).toFixed(3)} km</div>
                     </div>
                   )}
                 </div>
@@ -777,37 +864,31 @@ export const VolunteerDashboard: React.FC = () => {
                 <div className="space-y-4 bg-[#FAF9F5] p-4 rounded-xl border border-natural-border text-left">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-bold text-natural-text uppercase tracking-wider block">Commuting to Kitchen</span>
-                    <span className="w-2.5 h-2.5 bg-brand-500 rounded-full animate-ping"></span>
+                    <span className="w-2.5 h-2.5 bg-brand-500 rounded-full animate-pulse"></span>
                   </div>
                   <p className="text-xs text-natural-muted leading-normal font-semibold">
-                    Head to <strong>{activeTask.foodListing.provider?.businessName}</strong>. Geofence arrival triggers automatically when within 250m.
+                    Head to <strong>{activeTask.foodListing.provider?.businessName}</strong>. Pickup verification geofence unlocks when within 250m.
                   </p>
-                  <div className="p-3 bg-white rounded-lg border border-natural-border flex justify-between font-mono text-[9px] font-bold text-natural-muted">
-                    <span>Kitchen Distance:</span>
-                    <span className="text-natural-text">
-                      {Math.round(calculateDistance(currentLat, currentLng, activeTask.foodListing.pickupLatitude, activeTask.foodListing.pickupLongitude) * 1000)} m
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleSimulateGPS(activeTask.foodListing.pickupLatitude, activeTask.foodListing.pickupLongitude)}
-                      className="flex-1 text-center bg-[#FAF9F5] hover:bg-brand-50 text-brand-650 font-black py-2 border border-natural-border rounded-lg text-[9px] transition-colors uppercase tracking-wider font-mono"
-                    >
-                      📍 Simulate GPS Arrival
-                    </button>
-                    <button onClick={handleArrivePickup} className="btn-secondary py-1 px-3 text-[9px] normal-case">
-                      I've Arrived
-                    </button>
-                  </div>
+                  {currentLat !== null && (
+                    <div className="p-3 bg-white rounded-lg border border-natural-border flex justify-between font-mono text-[9px] font-bold text-natural-muted">
+                      <span>Kitchen Distance:</span>
+                      <span className="text-natural-text">
+                        {Math.round(calculateDistance(currentLat, currentLng!, activeTask.foodListing.pickupLatitude, activeTask.foodListing.pickupLongitude) * 1000)} m
+                      </span>
+                    </div>
+                  )}
+                  <button onClick={handleArrivePickup} className="w-full btn-primary py-2 text-[10px]">
+                    I've Arrived (Check Geofence)
+                  </button>
                 </div>
               )}
 
               {/* STATE: ARRIVED_AT_PICKUP -> OTP INPUT */}
               {activeTask.status === 'ARRIVED_AT_PICKUP' && (
                 <div className="space-y-3 bg-[#FAF9F5] p-4 rounded-xl border border-natural-border">
-                  <span className="text-xs font-bold text-natural-text uppercase tracking-wider block">1. Confirm Dispatch Handover</span>
+                  <span className="text-xs font-bold text-natural-text uppercase tracking-wider block">Confirm Dispatch Handover</span>
                   <p className="text-xs text-natural-muted leading-relaxed font-medium">
-                    Please collect the package from the kitchen staff and ask for the 6-digit handover OTP.
+                    Please collect the package from the kitchen staff and enter the 6-digit handover OTP.
                   </p>
                   {verificationData && (
                     <div className="text-[9px] text-accent-700 bg-accent-50 border border-accent-100 p-2.5 rounded-lg flex items-center space-x-1.5 font-mono font-bold">
@@ -848,28 +929,22 @@ export const VolunteerDashboard: React.FC = () => {
                 <div className="space-y-4 bg-[#FAF9F5] p-4 rounded-xl border border-natural-border text-left">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-bold text-natural-text uppercase tracking-wider block">Commuting to Shelter</span>
-                    <span className="w-2.5 h-2.5 bg-brand-500 rounded-full animate-ping"></span>
+                    <span className="w-2.5 h-2.5 bg-brand-500 rounded-full animate-pulse"></span>
                   </div>
                   <p className="text-xs text-natural-muted leading-normal font-semibold">
                     Head to <strong>{activeTask.zone.name}</strong>. Geofence arrival triggers automatically when within 250m.
                   </p>
-                  <div className="p-3 bg-white rounded-lg border border-natural-border flex justify-between font-mono text-[9px] font-bold text-natural-muted">
-                    <span>Shelter Distance:</span>
-                    <span className="text-natural-text">
-                      {Math.round(calculateDistance(currentLat, currentLng, activeTask.zone.latitude, activeTask.zone.longitude) * 1000)} m
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleSimulateGPS(activeTask.zone.latitude, activeTask.zone.longitude)}
-                      className="flex-1 text-center bg-[#FAF9F5] hover:bg-brand-50 text-brand-650 font-black py-2 border border-natural-border rounded-lg text-[9px] transition-colors uppercase tracking-wider font-mono"
-                    >
-                      📍 Simulate GPS Arrival
-                    </button>
-                    <button onClick={handleArriveDelivery} className="btn-secondary py-1 px-3 text-[9px] normal-case">
-                      I've Arrived
-                    </button>
-                  </div>
+                  {currentLat !== null && (
+                    <div className="p-3 bg-white rounded-lg border border-natural-border flex justify-between font-mono text-[9px] font-bold text-natural-muted">
+                      <span>Shelter Distance:</span>
+                      <span className="text-natural-text">
+                        {Math.round(calculateDistance(currentLat, currentLng!, activeTask.zone.latitude, activeTask.zone.longitude) * 1000)} m
+                      </span>
+                    </div>
+                  )}
+                  <button onClick={handleArriveDelivery} className="w-full btn-primary py-2 text-[10px]">
+                    I've Arrived (Check Dropoff Geofence)
+                  </button>
                 </div>
               )}
 
@@ -877,7 +952,7 @@ export const VolunteerDashboard: React.FC = () => {
               {activeTask.status === 'ARRIVED_AT_DESTINATION' && (
                 <div className="space-y-4 bg-[#FAF9F5] p-4 rounded-xl border border-natural-border">
                   <div>
-                    <span className="text-xs font-bold text-natural-text uppercase tracking-wider block">2. Confirm Recipient Handover</span>
+                    <span className="text-xs font-bold text-natural-text uppercase tracking-wider block">Confirm Recipient Handover</span>
                     <p className="text-xs text-natural-muted mt-1 leading-relaxed font-medium">
                       Enter the destination handover OTP code obtained from the shelter coordinator.
                     </p>
@@ -908,20 +983,19 @@ export const VolunteerDashboard: React.FC = () => {
               {(activeTask.status === 'PROOF_SUBMISSION' || activeTask.status === 'PHOTO_REJECTED') && (
                 <div className="space-y-4 bg-[#FAF9F5] p-4 rounded-xl border border-natural-border text-left">
                   <div>
-                    <span className="text-xs font-bold text-natural-text uppercase tracking-wider block">3. Photo proof Validation</span>
+                    <span className="text-xs font-bold text-natural-text uppercase tracking-wider block">Photo proof Validation</span>
                     <p className="text-xs text-natural-muted mt-1 leading-relaxed font-medium">
                       Provide a clear photo of the delivered food items at the shelter to claim rewards.
                     </p>
                   </div>
 
                   {activeTask.status === 'PHOTO_REJECTED' && (
-                    <div className="p-3 bg-red-50 border border-red-200 text-[11px] text-red-700 rounded-xl leading-normal font-semibold">
+                    <div className="p-3 bg-red-55/10 border border-red-200 text-[11px] text-red-700 rounded-xl leading-normal font-semibold">
                       ❌ Verification rejected. Photo matched duplicate hashes or failed content metrics. Please upload a genuine, distinct picture.
                     </div>
                   )}
 
                   <div className="space-y-2">
-                    {/* Native camera file picker fallback */}
                     <input
                       type="file"
                       accept="image/*"
@@ -943,7 +1017,7 @@ export const VolunteerDashboard: React.FC = () => {
                         htmlFor="evidence-image-camera"
                         className="flex flex-col items-center justify-center p-4 border border-dashed border-natural-border rounded-xl hover:bg-white cursor-pointer transition-all text-center bg-white"
                       >
-                        <Camera className="w-5 h-5 text-brand-600 mb-1.5 animate-pulse" />
+                        <Camera className="w-5 h-5 text-brand-600 mb-1.5" />
                         <span className="text-[10px] font-bold text-brand-700 uppercase">Camera Capture</span>
                       </label>
                       <label
@@ -957,7 +1031,7 @@ export const VolunteerDashboard: React.FC = () => {
                   </div>
 
                   {selectedFile && (
-                    <div className="flex flex-col p-3 bg-brand-50/50 border border-brand-100 rounded-xl space-y-2 text-xs">
+                    <div className="flex flex-col p-3 bg-brand-50/55 border border-brand-100 rounded-xl space-y-2 text-xs">
                       <div className="flex justify-between items-center text-brand-900 font-mono font-bold">
                         <span className="truncate max-w-[170px]">{selectedFile.name}</span>
                         <span>{Math.round(selectedFile.size / 1024)} KB</span>
@@ -974,6 +1048,28 @@ export const VolunteerDashboard: React.FC = () => {
                 </div>
               )}
 
+              {/* STATE: PENDING VERIFICATION (ML service down/uncertain fallback) */}
+              {activeTask.status === 'PENDING_VERIFICATION' && (
+                <div className="bg-amber-50 border border-amber-200 p-5 rounded-xl text-center space-y-3.5">
+                  <div className="text-2xl">⏳</div>
+                  <div>
+                    <h4 className="font-bold text-amber-800 text-xs uppercase tracking-wider">Proof Validation Pending</h4>
+                    <p className="text-xs text-amber-700 mt-2 font-medium leading-relaxed">
+                      Proof validation unavailable. Reward is pending verification.
+                    </p>
+                  </div>
+                  <p className="text-[9px] text-amber-600 font-mono">
+                    The backend has saved the upload. Admin review is checking coordinate signatures.
+                  </p>
+                  <button
+                    onClick={fetchVolunteerData}
+                    className="w-full py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-[10px] rounded-lg font-bold border border-amber-200 transition-colors uppercase tracking-wider"
+                  >
+                    Check Audit Status
+                  </button>
+                </div>
+              )}
+
               {/* STATE: AI_VALIDATION & INTERMEDIATE VERIFICATION STATES */}
               {(activeTask.status === 'AI_VALIDATION' || activeTask.status === 'VERIFIED' || activeTask.status === 'REWARD_CREDITED') && (
                 <div className="bg-[#FAF9F5] p-5 rounded-xl border border-natural-border text-center space-y-4">
@@ -985,7 +1081,7 @@ export const VolunteerDashboard: React.FC = () => {
                       <div className="flex items-center gap-1.5 text-brand-600">✓ GPS Location verified</div>
                       
                       <div className={activeTask.status === 'VERIFIED' || activeTask.status === 'REWARD_CREDITED' ? 'text-brand-600' : 'text-brand-400 animate-pulse'}>
-                        {activeTask.status === 'VERIFIED' || activeTask.status === 'REWARD_CREDITED' ? '✓ Image content approved' : '● Running AI object inference...'}
+                        {activeTask.status === 'VERIFIED' || activeTask.status === 'REWARD_CREDITED' ? '✓ Image approved' : '● Running AI object inference...'}
                       </div>
                       <div className={activeTask.status === 'REWARD_CREDITED' ? 'text-brand-600 font-black' : 'text-brand-400 animate-pulse font-black'}>
                         {activeTask.status === 'REWARD_CREDITED' ? '✓ Coins credited' : '● Processing reward tokens...'}
@@ -1007,7 +1103,7 @@ export const VolunteerDashboard: React.FC = () => {
                             ? 'bg-brand-600 border-brand-600 text-white shadow-xs' 
                             : stp.active 
                               ? 'bg-accent-500 border-accent-600 text-white shadow-sm animate-pulse' 
-                              : 'bg-white text-gray-300 border-gray-250'
+                              : 'bg-white text-gray-300 border-gray-200'
                         }`}>
                           {stp.done ? '✓' : idx + 1}
                         </div>
@@ -1027,7 +1123,7 @@ export const VolunteerDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleCancelTask}
-                  className="w-full py-2 bg-red-55/10 hover:bg-red-50 text-red-650 border border-red-100 font-bold text-[9px] rounded-lg transition-colors uppercase tracking-widest text-center"
+                  className="w-full py-2 bg-red-55/10 hover:bg-red-50 text-red-650 border border-red-100 font-bold text-[9px] rounded-lg transition-colors uppercase tracking-widest text-center animate-none"
                 >
                   ✖ Release Active Rescue Task
                 </button>
@@ -1039,7 +1135,7 @@ export const VolunteerDashboard: React.FC = () => {
         /* ================= IDLE STATE ================= */
         <div className="space-y-6">
           
-          {/* Volunteer KPI metrics dashboard block (Shopify overview style) */}
+          {/* Volunteer KPI metrics dashboard block */}
           <div className="grid grid-cols-2 md:grid-cols-5 bg-white border border-natural-border rounded-xl shadow-xs text-left divide-x divide-y md:divide-y-0 divide-natural-border overflow-hidden">
             <div className="p-4 flex flex-col justify-between">
               <div>
@@ -1081,12 +1177,12 @@ export const VolunteerDashboard: React.FC = () => {
               <span className="text-[8px] text-natural-muted mt-2 font-semibold block uppercase">Rescued {vStats.mealsDelivered} meals</span>
             </div>
 
-            <div className="p-4 flex flex-col justify-between bg-brand-50/30">
+            <div className="p-4 flex flex-col justify-between bg-brand-50/20">
               <div>
                 <span className="text-[9px] uppercase font-bold tracking-wider text-brand-700 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-accent-500" /> Token Wallet
                 </span>
-                <div className="text-2xl font-mono font-black text-brand-650 mt-2">🪙 {vStats.tokens} coins</div>
+                <div className="text-2xl font-mono font-black text-brand-600 mt-2">🪙 {vStats.tokens} coins</div>
               </div>
               <span className="text-[8px] text-brand-600 mt-2 font-bold block uppercase">Claim dining coupon discount</span>
             </div>
@@ -1108,16 +1204,16 @@ export const VolunteerDashboard: React.FC = () => {
 
               <div className="flex-1 relative rounded-xl overflow-hidden border border-natural-border min-h-[350px]">
                 <MapView
-                  center={[currentLat, currentLng]}
+                  center={[currentLat || 12.9716, currentLng || 77.5946]}
                   zoom={12}
-                  onLocationSelect={handleSimulateGPS}
                   markers={getIdleMapMarkers()}
                   polylinePoints={idlePolyline}
+                  interactive={false}
                 />
               </div>
 
               <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border mt-3 text-[10px] text-natural-muted font-medium text-left leading-relaxed">
-                <strong>Simulated GPS controller: </strong> Click anywhere on the map or markers to change your location coordinates and update matching commute routes.
+                📍 <strong>Live GPS stream:</strong> Geolocation updates will continuously stream from your browser device sensor to map matching algorithms.
               </div>
             </div>
 
@@ -1161,7 +1257,7 @@ export const VolunteerDashboard: React.FC = () => {
                     {recommendations.length === 0 ? (
                       <div className="p-12 text-center text-natural-muted space-y-4 flex flex-col items-center justify-center">
                         <div className="w-24 h-24 opacity-80 shrink-0">
-                          <img src={foodRescueImg} alt="No Food Matches" className="w-full h-full object-contain" />
+                          <img src={foodRescueImg} alt="No Food Matches" className="w-full h-full object-contain animate-pulse" />
                         </div>
                         <p className="text-xs font-semibold">No surplus food listings match your commute pathways.</p>
                         <Link to="/volunteer/routes" className="btn-secondary normal-case text-xs">
@@ -1171,17 +1267,26 @@ export const VolunteerDashboard: React.FC = () => {
                     ) : (
                       <div className="divide-y divide-natural-border">
                         {recommendations.map((rec) => {
-                          const pickupDist = calculateDistance(currentLat, currentLng, rec.foodListing.pickupLatitude, rec.foodListing.pickupLongitude);
-                          const expectedCoins = getExpectedReward(rec);
+                          const pickupDist = currentLat !== null && currentLng !== null
+                            ? calculateDistance(currentLat, currentLng, rec.foodListing.pickupLatitude, rec.foodListing.pickupLongitude)
+                            : 0.0;
+                          const expectedCoins = getExpectedRewardForTask(rec);
                           const isVeg = rec.foodListing.category === 'VEG';
                           const isCardSelected = selectedRecId === rec.foodListing.id;
+                          
+                          let matchQuality = "Excellent match";
+                          if (rec.matchingScore < 70) {
+                            matchQuality = "Fair match";
+                          } else if (rec.matchingScore < 85) {
+                            matchQuality = "Good match";
+                          }
 
                           return (
                             <div
                               key={rec.foodListing.id}
                               onClick={() => setSelectedRecId(rec.foodListing.id)}
-                              className={`p-4 hover:bg-[#FAF9F5] cursor-pointer transition-all flex flex-col gap-3.5 border-b border-natural-border last:border-b-0 ${
-                                isCardSelected ? 'bg-brand-50/15 border-l-4 border-l-brand-600 pl-3' : ''
+                              className={`p-4 hover:bg-[#FAF9F5]/80 cursor-pointer transition-all flex flex-col gap-3.5 border-b border-natural-border last:border-b-0 ${
+                                isCardSelected ? 'bg-brand-50/10 border-l-4 border-l-brand-600 pl-3' : ''
                               }`}
                             >
                               <div className="flex gap-4">
@@ -1192,7 +1297,7 @@ export const VolunteerDashboard: React.FC = () => {
                                     <div className="w-full h-full flex items-center justify-center text-xl bg-brand-50">🍲</div>
                                   )}
                                   <span className={`absolute top-1 left-1 text-[7px] font-black px-1 py-0.5 rounded tracking-wide border shadow-xs ${
-                                    isVeg ? 'bg-emerald-55/10 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
+                                    isVeg ? 'bg-emerald-55/10 text-emerald-800 border-emerald-250' : 'bg-rose-50 text-rose-700 border-rose-200'
                                   }`}>
                                     {rec.foodListing.category}
                                   </span>
@@ -1200,8 +1305,8 @@ export const VolunteerDashboard: React.FC = () => {
 
                                 <div className="flex-1 min-w-0 text-left space-y-1 text-xs">
                                   <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider font-mono">
-                                      ★ {rec.matchingScore}% Route Match
+                                    <span className="text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-black uppercase font-mono">
+                                      ★ {rec.matchingScore}% {matchQuality}
                                     </span>
                                     <span className="text-[8px] bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5 rounded font-bold font-mono">
                                       Detour: {rec.deviation.toFixed(1)} km
@@ -1223,7 +1328,7 @@ export const VolunteerDashboard: React.FC = () => {
                                     </div>
                                     <div>
                                       <span className="block text-[7px] uppercase font-bold tracking-wider text-natural-muted font-sans">Safety window</span>
-                                      <span className="text-brand-750 font-bold block">{formatTime(rec.foodListing.expiryTime)}</span>
+                                      <span className="text-brand-600 font-bold block">{formatTime(rec.foodListing.expiryTime)}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -1282,7 +1387,7 @@ export const VolunteerDashboard: React.FC = () => {
                         <svg className="absolute inset-x-0 bottom-2 h-32 w-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
                           <defs>
                             <linearGradient id="gradient-area" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#244F3C" stopOpacity="0.15" />
+                              <stop offset="0%" stopColor="#244F3C" stopOpacity="0.12" />
                               <stop offset="100%" stopColor="#244F3C" stopOpacity="0.0" />
                             </linearGradient>
                           </defs>
@@ -1361,7 +1466,7 @@ export const VolunteerDashboard: React.FC = () => {
                               </span>
                             </div>
                             <div className="text-right shrink-0">
-                              <strong className="text-xs font-mono font-black text-brand-650 block">🪙 +{getExpectedRewardForTask(t)} coins</strong>
+                              <strong className="text-xs font-mono font-black text-brand-600 block">🪙 +{getExpectedRewardForTask(t)} coins</strong>
                               <span className="text-[8px] text-natural-muted block mt-0.5 font-mono">
                                 {new Date(t.createdAt || new Date()).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                               </span>

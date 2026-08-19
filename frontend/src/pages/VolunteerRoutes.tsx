@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MapView } from '../components/MapView';
 import { 
-  ArrowLeft, Plus, Trash2, Loader2, Route, CheckCircle2, AlertCircle, MapPin, Clock, Compass
+  ArrowLeft, Plus, Trash2, Loader2, Route, CheckCircle2, AlertCircle, MapPin, Clock, Compass, Search
 } from 'lucide-react';
 import axios from 'axios';
 import volunteerCommuteImg from '../assets/volunteer_commute.png';
@@ -37,10 +37,20 @@ export const VolunteerRoutes: React.FC = () => {
   const [activeFrom, setActiveFrom] = useState('08:00 AM');
   const [activeUntil, setActiveUntil] = useState('09:00 AM');
   const [maxDeviation, setMaxDeviation] = useState<number>(5.0);
-  
-  // Which marker is currently selected (for coordinates input helper)
-  const [pickingLocation, setPickingLocation] = useState<'START' | 'END' | null>(null);
 
+  // Nominatim autocomplete states
+  const [originSearch, setOriginSearch] = useState('');
+  const [originSuggestions, setOriginSuggestions] = useState<any[]>([]);
+  const [loadingOriginSuggestions, setLoadingOriginSuggestions] = useState(false);
+
+  const [destSearch, setDestSearch] = useState('');
+  const [destSuggestions, setDestSuggestions] = useState<any[]>([]);
+  const [loadingDestSuggestions, setLoadingDestSuggestions] = useState(false);
+
+  // OSRM calculated route preview
+  const [previewRouteGeometry, setPreviewRouteGeometry] = useState<[number, number][]>([]);
+
+  // Fetch routes list
   const fetchRoutesList = async () => {
     try {
       const res = await axios.get('/api/v1/volunteers/routes');
@@ -56,38 +66,123 @@ export const VolunteerRoutes: React.FC = () => {
     fetchRoutesList();
   }, []);
 
-  const handleCoordinatesPick = (lat: number, lng: number) => {
-    if (pickingLocation === 'START') {
-      setStartLat(lat);
-      setStartLng(lng);
-      setPickingLocation(null);
-    } else if (pickingLocation === 'END') {
-      setEndLat(lat);
-      setEndLng(lng);
-      setPickingLocation(null);
+  // Origin Nominatim search autocomplete
+  useEffect(() => {
+    if (originSearch.length < 3) {
+      setOriginSuggestions([]);
+      return;
     }
-    setErrorText(null);
+    const delayDebounce = setTimeout(async () => {
+      setLoadingOriginSuggestions(true);
+      try {
+        const res = await axios.get('https://nominatim.openstreetmap.org/search', {
+          params: {
+            q: originSearch,
+            format: 'json',
+            limit: 5,
+            addressdetails: 1
+          }
+        });
+        setOriginSuggestions(res.data || []);
+      } catch (err) {
+        console.warn("Origin suggestions search failed", err);
+      } finally {
+        setLoadingOriginSuggestions(false);
+      }
+    }, 600);
+    return () => clearTimeout(delayDebounce);
+  }, [originSearch]);
+
+  // Destination Nominatim search autocomplete
+  useEffect(() => {
+    if (destSearch.length < 3) {
+      setDestSuggestions([]);
+      return;
+    }
+    const delayDebounce = setTimeout(async () => {
+      setLoadingDestSuggestions(true);
+      try {
+        const res = await axios.get('https://nominatim.openstreetmap.org/search', {
+          params: {
+            q: destSearch,
+            format: 'json',
+            limit: 5,
+            addressdetails: 1
+          }
+        });
+        setDestSuggestions(res.data || []);
+      } catch (err) {
+        console.warn("Destination suggestions search failed", err);
+      } finally {
+        setLoadingDestSuggestions(false);
+      }
+    }, 600);
+    return () => clearTimeout(delayDebounce);
+  }, [destSearch]);
+
+  const handleSelectOriginSuggestion = (suggestion: any) => {
+    setStartName(suggestion.display_name);
+    setStartLat(parseFloat(suggestion.lat));
+    setStartLng(parseFloat(suggestion.lon));
+    setOriginSuggestions([]);
+    setOriginSearch(suggestion.display_name);
   };
+
+  const handleSelectDestSuggestion = (suggestion: any) => {
+    setEndName(suggestion.display_name);
+    setEndLat(parseFloat(suggestion.lat));
+    setEndLng(parseFloat(suggestion.lon));
+    setDestSuggestions([]);
+    setDestSearch(suggestion.display_name);
+  };
+
+  // OSRM route geometry calculation
+  useEffect(() => {
+    if (startLat && startLng && endLat && endLng) {
+      const fetchOSRMPreview = async () => {
+        try {
+          const res = await axios.get(`https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}`, {
+            params: {
+              overview: 'full',
+              geometries: 'geojson'
+            }
+          });
+          if (res.data && res.data.routes && res.data.routes.length > 0) {
+            const coordinates = res.data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]] as [number, number]);
+            setPreviewRouteGeometry(coordinates);
+          }
+        } catch (err) {
+          console.warn("OSRM routing failed", err);
+          setPreviewRouteGeometry([ [startLat, startLng], [endLat, endLng] ]);
+        }
+      };
+      fetchOSRMPreview();
+    } else {
+      setPreviewRouteGeometry([]);
+    }
+  }, [startLat, startLng, endLat, endLng]);
 
   const handleRegisterRoute = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorText(null);
 
     if (startLat === null || startLng === null) {
-      setErrorText("Please pick an origin start point on the map canvas.");
+      setErrorText("Please search and select an Origin starting point.");
       return;
     }
     if (endLat === null || endLng === null) {
-      setErrorText("Please pick a destination end point on the map canvas.");
+      setErrorText("Please search and select a Destination point.");
       return;
     }
     if (!startName || !endName) {
-      setErrorText("Please complete the labels of transit locations (e.g. Home, Office).");
+      setErrorText("Please complete the labels of transit locations.");
       return;
     }
 
     setLoading(true);
     try {
+      const geomString = previewRouteGeometry.map(p => `${p[0]},${p[1]}`).join(';');
+
       const payload = {
         startLatitude: startLat,
         startLongitude: startLng,
@@ -95,7 +190,7 @@ export const VolunteerRoutes: React.FC = () => {
         endLongitude: endLng,
         startName,
         endName,
-        routeGeometry: `${startLat},${startLng};${endLat},${endLng}`,
+        routeGeometry: geomString,
         routeType,
         activeFrom,
         activeUntil,
@@ -107,11 +202,14 @@ export const VolunteerRoutes: React.FC = () => {
       // Reset Form fields
       setStartName('');
       setEndName('');
+      setOriginSearch('');
+      setDestSearch('');
       setStartLat(null);
       setStartLng(null);
       setEndLat(null);
       setEndLng(null);
       setMaxDeviation(5.0);
+      setPreviewRouteGeometry([]);
 
       fetchRoutesList();
     } catch (err: any) {
@@ -133,18 +231,13 @@ export const VolunteerRoutes: React.FC = () => {
   const getMapMarkers = () => {
     const markers = [];
     if (startLat !== null && startLng !== null) {
-      markers.push({ id: 'start', latitude: startLat, longitude: startLng, title: 'Start: ' + (startName || 'Origin'), role: 'CURRENT' as const });
+      markers.push({ id: 'start', latitude: startLat, longitude: startLng, title: 'Origin: ' + startName, role: 'CURRENT' as const });
     }
     if (endLat !== null && endLng !== null) {
-      markers.push({ id: 'end', latitude: endLat, longitude: endLng, title: 'End: ' + (endName || 'Destination'), role: 'VOLUNTEER' as const });
+      markers.push({ id: 'end', latitude: endLat, longitude: endLng, title: 'Destination: ' + endName, role: 'VOLUNTEER' as const });
     }
     return markers;
   };
-
-  const currentPolyline: [number, number][] = (startLat && endLat) ? [
-    [startLat, startLng!],
-    [endLat, endLng!]
-  ] : [];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-left max-w-5xl mx-auto">
@@ -169,61 +262,81 @@ export const VolunteerRoutes: React.FC = () => {
         </div>
 
         {errorText && (
-          <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-750 flex items-start space-x-2 font-semibold">
+          <div className="p-4 rounded-xl bg-red-55/10 border border-red-200 text-xs text-red-750 flex items-start space-x-2 font-semibold">
             <AlertCircle className="w-4 h-4 shrink-0 text-red-650 mt-0.5" />
             <span>{errorText}</span>
           </div>
         )}
 
-        {/* Input Form */}
+        {/* Input Form with Nominatim geocoding autocomplete */}
         <form onSubmit={handleRegisterRoute} className="bg-white border border-natural-border p-5 rounded-2xl shadow-xs space-y-4">
-          <h3 className="font-bold text-xs text-natural-text border-b border-natural-border pb-2 uppercase tracking-wider">Add Commute Pathway</h3>
+          <h3 className="font-bold text-xs text-natural-text border-b border-natural-border pb-2 uppercase tracking-wider font-display">Add Commute Pathway</h3>
           
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Origin Location Name</label>
-              <input
-                type="text"
-                required
-                value={startName}
-                onChange={(e) => setStartName(e.target.value)}
-                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
-                placeholder="E.g. Home"
-              />
-              <button
-                type="button"
-                onClick={() => setPickingLocation('START')}
-                className={`mt-2 w-full text-center text-[9px] py-1.5 border rounded-lg font-black transition-all uppercase tracking-wider ${
-                  pickingLocation === 'START'
-                    ? 'border-brand-600 bg-brand-50 text-brand-700'
-                    : 'border-gray-200 bg-gray-50 text-natural-muted hover:bg-gray-100'
-                }`}
-              >
-                {startLat ? 'Origin Captured ✓' : 'Pin Origin'}
-              </button>
+          <div className="space-y-4">
+            {/* Origin Autocomplete Search Box */}
+            <div className="relative">
+              <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Search Origin Starting Point</label>
+              <div className="relative mt-1.5">
+                <input
+                  type="text"
+                  required
+                  value={originSearch}
+                  onChange={(e) => setOriginSearch(e.target.value)}
+                  className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
+                  placeholder="Type origin start address..."
+                />
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                {loadingOriginSuggestions && (
+                  <Loader2 className="w-3.5 h-3.5 text-brand-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
+                )}
+              </div>
+
+              {originSuggestions.length > 0 && (
+                <div className="absolute left-0 right-0 z-50 bg-white border border-natural-border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-100 text-xs">
+                  {originSuggestions.map((sug, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleSelectOriginSuggestion(sug)}
+                      className="p-2.5 hover:bg-brand-50/50 cursor-pointer transition-colors text-[11px] text-natural-text truncate"
+                    >
+                      {sug.display_name}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div>
-              <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Destination Location Name</label>
-              <input
-                type="text"
-                required
-                value={endName}
-                onChange={(e) => setEndName(e.target.value)}
-                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
-                placeholder="E.g. Office"
-              />
-              <button
-                type="button"
-                onClick={() => setPickingLocation('END')}
-                className={`mt-2 w-full text-center text-[9px] py-1.5 border rounded-lg font-black transition-all uppercase tracking-wider ${
-                  pickingLocation === 'END'
-                    ? 'border-brand-600 bg-brand-50 text-brand-700'
-                    : 'border-gray-200 bg-gray-50 text-natural-muted hover:bg-gray-100'
-                }`}
-              >
-                {endLat ? 'Destination Captured ✓' : 'Pin Destination'}
-              </button>
+            {/* Destination Autocomplete Search Box */}
+            <div className="relative">
+              <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Search Destination Point</label>
+              <div className="relative mt-1.5">
+                <input
+                  type="text"
+                  required
+                  value={destSearch}
+                  onChange={(e) => setDestSearch(e.target.value)}
+                  className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
+                  placeholder="Type destination address..."
+                />
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                {loadingDestSuggestions && (
+                  <Loader2 className="w-3.5 h-3.5 text-brand-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
+                )}
+              </div>
+
+              {destSuggestions.length > 0 && (
+                <div className="absolute left-0 right-0 z-50 bg-white border border-natural-border rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto divide-y divide-gray-100 text-xs">
+                  {destSuggestions.map((sug, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleSelectDestSuggestion(sug)}
+                      className="p-2.5 hover:bg-brand-50/50 cursor-pointer transition-colors text-[11px] text-natural-text truncate"
+                    >
+                      {sug.display_name}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -268,7 +381,7 @@ export const VolunteerRoutes: React.FC = () => {
           <div>
             <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted flex justify-between">
               <span>Acceptable Route Detour Range</span>
-              <span className="font-mono text-brand-650 font-black">{maxDeviation} km</span>
+              <span className="font-mono text-brand-600 font-black">{maxDeviation} km</span>
             </label>
             <input
               type="range"
@@ -293,11 +406,11 @@ export const VolunteerRoutes: React.FC = () => {
         {/* List of registered ones */}
         <div className="bg-white border border-natural-border rounded-2xl shadow-xs overflow-hidden">
           <div className="p-4 border-b border-natural-border bg-[#FAF9F5]">
-            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Declared Pathways</h3>
+            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text font-display">Declared Pathways</h3>
           </div>
           {routes.length === 0 ? (
             <div className="p-8 text-center text-xs text-natural-muted font-semibold">
-              No registered commute routes found. Pin endpoints on the map grid.
+              No registered commute routes found. Search and register origin/destination above.
             </div>
           ) : (
             <div className="divide-y divide-natural-border">
@@ -305,7 +418,7 @@ export const VolunteerRoutes: React.FC = () => {
                 <div key={rt.id} className="p-4 hover:bg-[#FAF9F5] transition-colors flex items-center justify-between text-xs gap-3">
                   <div className="min-w-0">
                     <h5 className="font-display font-black text-natural-text uppercase tracking-wider truncate flex items-center gap-1">
-                      <Route className="w-4 h-4 text-brand-600 shrink-0" /> {rt.startName} ➔ {rt.endName}
+                      <Route className="w-4 h-4 text-brand-600 shrink-0" /> {rt.startName.split(',')[0]} ➔ {rt.endName.split(',')[0]}
                     </h5>
                     <div className="text-[9px] text-natural-muted mt-2 flex flex-wrap gap-1.5 font-bold uppercase tracking-wider font-mono">
                       <span className="bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded">{rt.routeType}</span>
@@ -332,18 +445,16 @@ export const VolunteerRoutes: React.FC = () => {
         <div className="p-3 bg-brand-50 border border-brand-100 rounded-xl mb-4 text-xs font-semibold text-brand-850 flex items-start space-x-2">
           <Compass className="w-4 h-4 shrink-0 text-brand-750 mt-0.5" />
           <span>
-            {pickingLocation 
-              ? `Select coordinates for your ${pickingLocation} point by clicking anywhere on the map grid.`
-              : 'Pin location coordinate points by selecting Pin Origin/Destination buttons, then clicking map.'}
+            Search addresses on the left. The map will display markers and calculate the actual road geometry path.
           </span>
         </div>
         <div className="flex-1 min-h-[350px] relative overflow-hidden rounded-2xl border border-natural-border">
           <MapView
-            center={[12.9716, 77.5946]}
+            center={[startLat || 12.9716, startLng || 77.5946]}
             zoom={12}
-            onLocationSelect={handleCoordinatesPick}
             markers={getMapMarkers()}
-            polylinePoints={currentPolyline}
+            polylinePoints={previewRouteGeometry}
+            interactive={false}
           />
         </div>
       </div>

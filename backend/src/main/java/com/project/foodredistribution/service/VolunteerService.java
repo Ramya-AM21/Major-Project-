@@ -10,6 +10,8 @@ import com.project.foodredistribution.repository.FoodListingRepository;
 import com.project.foodredistribution.repository.VolunteerRepository;
 import com.project.foodredistribution.repository.VolunteerRouteRepository;
 import com.project.foodredistribution.repository.ZoneRepository;
+import com.project.foodredistribution.repository.TokenTransactionRepository;
+import com.project.foodredistribution.entity.TokenTransaction;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +28,7 @@ public class VolunteerService {
     private final FoodListingRepository foodListingRepository;
     private final ZoneRepository zoneRepository;
     private final MatchingService matchingService;
+    private final TokenTransactionRepository tokenTransactionRepository;
     private final com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler;
 
     public VolunteerService(VolunteerRepository volunteerRepository,
@@ -33,17 +36,24 @@ public class VolunteerService {
                             FoodListingRepository foodListingRepository,
                             ZoneRepository zoneRepository,
                             MatchingService matchingService,
+                            TokenTransactionRepository tokenTransactionRepository,
                             com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler) {
         this.volunteerRepository = volunteerRepository;
         this.volunteerRouteRepository = volunteerRouteRepository;
         this.foodListingRepository = foodListingRepository;
         this.zoneRepository = zoneRepository;
         this.matchingService = matchingService;
+        this.tokenTransactionRepository = tokenTransactionRepository;
         this.webSocketHandler = webSocketHandler;
     }
 
     @Transactional
     public VolunteerRoute updateRouteLocation(UUID routeId, Double latitude, Double longitude, String email) {
+        return updateRouteLocation(routeId, latitude, longitude, null, null, email);
+    }
+
+    @Transactional
+    public VolunteerRoute updateRouteLocation(UUID routeId, Double latitude, Double longitude, Double accuracy, String timestamp, String email) {
         VolunteerRoute route = volunteerRouteRepository.findById(routeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Route not found: " + routeId));
 
@@ -51,15 +61,28 @@ public class VolunteerService {
             throw new org.springframework.security.access.AccessDeniedException("Unauthorized to update route location");
         }
 
+        if (accuracy != null && accuracy > matchingService.getGpsAccuracyThresholdMeters()) {
+            org.slf4j.LoggerFactory.getLogger(VolunteerService.class).warn("Ignoring route location update due to low accuracy: {} meters", accuracy);
+            return route;
+        }
+
         route.setCurrentLatitude(latitude);
         route.setCurrentLongitude(longitude);
-        route.setLastLocationUpdate(java.time.LocalDateTime.now());
+        java.time.LocalDateTime updateTime = java.time.LocalDateTime.now();
+        if (timestamp != null && !timestamp.trim().isEmpty()) {
+            try {
+                updateTime = java.time.LocalDateTime.parse(timestamp.replace("Z", ""));
+            } catch (Exception e) {
+                // Ignore parse error
+            }
+        }
+        route.setLastLocationUpdate(updateTime);
         VolunteerRoute saved = volunteerRouteRepository.save(route);
 
         // Broadcast telemetry details via WS
         String telemetryData = String.format(
-            "{\"routeId\":\"%s\",\"volunteerId\":\"%s\",\"latitude\":%f,\"longitude\":%f}",
-            routeId, route.getVolunteer().getId(), latitude, longitude
+            "{\"routeId\":\"%s\",\"volunteerId\":\"%s\",\"latitude\":%f,\"longitude\":%f,\"accuracy\":%f,\"timestamp\":\"%s\"}",
+            routeId, route.getVolunteer().getId(), latitude, longitude, (accuracy != null ? accuracy : 0.0), updateTime.toString()
         );
         webSocketHandler.broadcastUpdate("LOCATION_UPDATE", telemetryData);
 
@@ -68,10 +91,30 @@ public class VolunteerService {
 
     @Transactional
     public void updateVolunteerLocation(Double latitude, Double longitude, String email) {
+        updateVolunteerLocation(latitude, longitude, null, null, email);
+    }
+
+    @Transactional
+    public void updateVolunteerLocation(Double latitude, Double longitude, Double accuracy, String timestamp, String email) {
         Volunteer volunteer = getVolunteerByEmail(email);
+
+        if (accuracy != null && accuracy > matchingService.getGpsAccuracyThresholdMeters()) {
+            org.slf4j.LoggerFactory.getLogger(VolunteerService.class).warn("Ignoring volunteer location update due to low accuracy: {} meters", accuracy);
+            return;
+        }
+
         volunteer.setLatitude(latitude);
         volunteer.setLongitude(longitude);
         volunteerRepository.save(volunteer);
+
+        java.time.LocalDateTime updateTime = java.time.LocalDateTime.now();
+        if (timestamp != null && !timestamp.trim().isEmpty()) {
+            try {
+                updateTime = java.time.LocalDateTime.parse(timestamp.replace("Z", ""));
+            } catch (Exception e) {
+                // Ignore parse error
+            }
+        }
 
         // Update all ACTIVE routes for the volunteer
         List<VolunteerRoute> routes = volunteerRouteRepository.findByVolunteerId(volunteer.getId());
@@ -79,15 +122,15 @@ public class VolunteerService {
             if (route.getStatus() == null || "ACTIVE".equalsIgnoreCase(route.getStatus())) {
                 route.setCurrentLatitude(latitude);
                 route.setCurrentLongitude(longitude);
-                route.setLastLocationUpdate(java.time.LocalDateTime.now());
+                route.setLastLocationUpdate(updateTime);
                 volunteerRouteRepository.save(route);
             }
         }
 
         // Broadcast telemetry details via WS
         String telemetryData = String.format(
-            "{\"volunteerId\":\"%s\",\"latitude\":%f,\"longitude\":%f,\"timestamp\":\"%s\"}",
-            volunteer.getId(), latitude, longitude, java.time.LocalDateTime.now().toString()
+            "{\"volunteerId\":\"%s\",\"latitude\":%f,\"longitude\":%f,\"accuracy\":%f,\"timestamp\":\"%s\"}",
+            volunteer.getId(), latitude, longitude, (accuracy != null ? accuracy : 0.0), updateTime.toString()
         );
         webSocketHandler.broadcastUpdate("VOLUNTEER_LOCATION_UPDATE", telemetryData);
     }
@@ -144,27 +187,48 @@ public class VolunteerService {
             }
         }
 
+        double maxDevLimit = matchingService.getMaxRouteDeviationKm();
+        double maxVolToShelterLimit = matchingService.getMaxVolunteerToShelterDistanceKm();
+
         if (activeRoutes.isEmpty()) {
-            // Fallback: If no ACTIVE routes are registered, recommend all available tasks by matching to food's destination zone
-            for (FoodListing food : validListings) {
-                Zone zone = food.getDestinationZone();
-                if (zone == null && !zones.isEmpty()) {
-                    zone = zones.get(0);
+            // Fallback: If no ACTIVE routes are registered, recommend tasks close to volunteer's current real-time GPS location (within 5km)
+            if (volunteer.getLatitude() != null && volunteer.getLongitude() != null) {
+                List<TaskMatchRecommendation> candidates = new ArrayList<>();
+                for (FoodListing food : validListings) {
+                    Zone zone = food.getDestinationZone();
+                    if (zone == null && !zones.isEmpty()) {
+                        zone = zones.get(0);
+                    }
+                    if (zone != null && "ACTIVE".equalsIgnoreCase(zone.getStatus())) {
+                        double distanceToPickup = matchingService.calculateDistance(volunteer.getLatitude(), volunteer.getLongitude(), food.getPickupLatitude(), food.getPickupLongitude());
+                        if (distanceToPickup <= maxVolToShelterLimit) {
+                            VolunteerRoute virtualRoute = new VolunteerRoute();
+                            virtualRoute.setStartLatitude(volunteer.getLatitude());
+                            virtualRoute.setStartLongitude(volunteer.getLongitude());
+                            virtualRoute.setEndLatitude(zone.getLatitude());
+                            virtualRoute.setEndLongitude(zone.getLongitude());
+                            
+                            TaskMatchRecommendation rec = matchingService.getRealTimeMatchDetail(volunteer, virtualRoute, food, zone, false);
+                            candidates.add(rec);
+                        }
+                    }
                 }
-                if (zone != null && "ACTIVE".equalsIgnoreCase(zone.getStatus())) {
-                    double deviation = 1.2; // Static virtual deviation
-                    // Simulate a virtual route directly from pickup to delivery
+                candidates.sort(Comparator.comparingDouble(TaskMatchRecommendation::getMatchingScore).reversed());
+                
+                List<TaskMatchRecommendation> shortlist = candidates.subList(0, Math.min(5, candidates.size()));
+                for (TaskMatchRecommendation rec : shortlist) {
                     VolunteerRoute virtualRoute = new VolunteerRoute();
-                    virtualRoute.setStartLatitude(food.getPickupLatitude());
-                    virtualRoute.setStartLongitude(food.getPickupLongitude());
-                    virtualRoute.setEndLatitude(zone.getLatitude());
-                    virtualRoute.setEndLongitude(zone.getLongitude());
+                    virtualRoute.setStartLatitude(volunteer.getLatitude());
+                    virtualRoute.setStartLongitude(volunteer.getLongitude());
+                    virtualRoute.setEndLatitude(rec.getZone().getLatitude());
+                    virtualRoute.setEndLongitude(rec.getZone().getLongitude());
                     
-                    double score = matchingService.calculateMatchingScore(volunteer, virtualRoute, food, zone);
-                    recommendations.add(new TaskMatchRecommendation(food, zone, null, deviation, score));
+                    TaskMatchRecommendation roadRec = matchingService.getRealTimeMatchDetail(volunteer, virtualRoute, rec.getFoodListing(), rec.getZone(), true);
+                    recommendations.add(roadRec);
                 }
             }
         } else {
+            List<TaskMatchRecommendation> candidates = new ArrayList<>();
             for (VolunteerRoute route : activeRoutes) {
                 for (FoodListing food : validListings) {
                     Zone zone = food.getDestinationZone();
@@ -172,23 +236,56 @@ public class VolunteerService {
                         zone = zones.get(0);
                     }
                     if (zone != null && "ACTIVE".equalsIgnoreCase(zone.getStatus())) {
-                        double deviation = matchingService.calculateRouteDeviation(route, food, zone);
-                        double maxDev = route.getMaxDeviation() != null ? route.getMaxDeviation() : 15.0;
+                        double distanceToPickup = matchingService.calculateDistance(
+                            (route.getCurrentLatitude() != null ? route.getCurrentLatitude() : route.getStartLatitude()),
+                            (route.getCurrentLongitude() != null ? route.getCurrentLongitude() : route.getStartLongitude()),
+                            food.getPickupLatitude(), food.getPickupLongitude()
+                        );
                         
-                        // Recommend tasks within a reasonable extra travel range
-                        if (deviation <= maxDev) {
-                            double score = matchingService.calculateMatchingScore(volunteer, route, food, zone);
-                            recommendations.add(new TaskMatchRecommendation(food, zone, route.getId(), deviation, score));
+                        if (distanceToPickup <= maxVolToShelterLimit) {
+                            double deviation = matchingService.calculateRouteDeviation(route, food, zone);
+                            double maxDev = route.getMaxDeviation() != null ? route.getMaxDeviation() : maxDevLimit;
+                            
+                            if (deviation <= maxDev) {
+                                TaskMatchRecommendation rec = matchingService.getRealTimeMatchDetail(volunteer, route, food, zone, false);
+                                if (rec.getDistanceToRoute() <= maxDev) {
+                                    if (rec.getIsAhead() || rec.getDistanceToVolunteer() <= 1.0) {
+                                        candidates.add(rec);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
+
+            candidates.sort(Comparator.comparingDouble(TaskMatchRecommendation::getMatchingScore).reversed());
+
+            List<TaskMatchRecommendation> shortlist = candidates.subList(0, Math.min(5, candidates.size()));
+            for (TaskMatchRecommendation rec : shortlist) {
+                VolunteerRoute route = null;
+                for (VolunteerRoute r : activeRoutes) {
+                    if (r.getId().equals(rec.getRouteId())) {
+                        route = r;
+                        break;
+                    }
+                }
+                if (route != null) {
+                    TaskMatchRecommendation roadRec = matchingService.getRealTimeMatchDetail(volunteer, route, rec.getFoodListing(), rec.getZone(), true);
+                    recommendations.add(roadRec);
+                } else {
+                    recommendations.add(rec);
+                }
+            }
         }
 
-        // Sort by matching score in descending order
         recommendations.sort(Comparator.comparingDouble(TaskMatchRecommendation::getMatchingScore).reversed());
 
-        // Cap at 10 recommendations to represent realistic dashboard options
         return recommendations.subList(0, Math.min(10, recommendations.size()));
+    }
+
+    public List<TokenTransaction> getWalletTransactions(String email) {
+        Volunteer volunteer = getVolunteerByEmail(email);
+        return tokenTransactionRepository.findByVolunteerId(volunteer.getId());
     }
 }
