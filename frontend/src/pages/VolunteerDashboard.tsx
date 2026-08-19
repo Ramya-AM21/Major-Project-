@@ -5,7 +5,8 @@ import { MapView } from '../components/MapView';
 import { 
   CheckCircle2, AlertTriangle, Truck, MapPin, Navigation, Clock, ShieldAlert, Award, 
   AlertCircle, Camera, Heart, Trophy, Sparkles, ChevronRight, Activity, Calendar, ShieldCheck, Check,
-  RefreshCw, Map, User, ShoppingBag, Eye, HelpCircle, ArrowRight, Compass, ChevronDown, ChevronUp, Loader2
+  RefreshCw, Map, User, ShoppingBag, Eye, HelpCircle, ArrowRight, Compass, ChevronDown, ChevronUp, Loader2,
+  Star, Coins, PartyPopper, Lightbulb, XCircle, Utensils, X
 } from 'lucide-react';
 import axios from 'axios';
 import volunteerCommuteImg from '../assets/volunteer_commute.png';
@@ -122,6 +123,150 @@ export const VolunteerDashboard: React.FC = () => {
   // OSRM route geometry states
   const [routeGeometryPoints, setRouteGeometryPoints] = useState<[number, number][]>([]);
   const [loadingRouteGeometry, setLoadingRouteGeometry] = useState(false);
+
+  // Community Need Report Modal states
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportName, setReportName] = useState('');
+  const [reportAddress, setReportAddress] = useState('');
+  const [reportCity, setReportCity] = useState('');
+  const [reportState, setReportState] = useState('');
+  const [reportCountry, setReportCountry] = useState('');
+  const [reportEstimatedPeople, setReportEstimatedPeople] = useState(10);
+  const [reportCategory, setReportCategory] = useState('FOOD');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportEvidenceUrl, setReportEvidenceUrl] = useState('');
+  const [reportTimeObserved, setReportTimeObserved] = useState(() => new Date().toISOString().slice(0, 16));
+  const [reportingError, setReportingError] = useState<string | null>(null);
+  const [reportingSuccess, setReportingSuccess] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(false);
+  const [existingDuplicateZone, setExistingDuplicateZone] = useState<any | null>(null);
+  const [isReportingLocation, setIsReportingLocation] = useState(false);
+  const [reportLatitude, setReportLatitude] = useState<number | null>(null);
+  const [reportLongitude, setReportLongitude] = useState<number | null>(null);
+  const [reportGpsAccuracy, setReportGpsAccuracy] = useState<number | null>(null);
+
+  const resetReportForm = () => {
+    setReportName('');
+    setReportAddress('');
+    setReportCity('');
+    setReportState('');
+    setReportCountry('');
+    setReportEstimatedPeople(10);
+    setReportCategory('FOOD');
+    setReportDescription('');
+    setReportEvidenceUrl('');
+    setReportTimeObserved(new Date().toISOString().slice(0, 16));
+    setReportingError(null);
+    setReportingSuccess(false);
+    setDuplicateWarning(false);
+    setExistingDuplicateZone(null);
+    setReportLatitude(null);
+    setReportLongitude(null);
+    setReportGpsAccuracy(null);
+  };
+
+  const captureReportGpsLocation = () => {
+    setIsReportingLocation(true);
+    setReportingError(null);
+    if (!navigator.geolocation) {
+      setReportingError("Browser geolocation is not supported by your device.");
+      setIsReportingLocation(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        if (accuracy > 50) {
+          setReportingError(`Location accuracy is too low (${Math.round(accuracy)} meters). Please try again in an area with a clearer GPS signal.`);
+          setIsReportingLocation(false);
+          return;
+        }
+        setReportLatitude(latitude);
+        setReportLongitude(longitude);
+        setReportGpsAccuracy(accuracy);
+        setIsReportingLocation(false);
+      },
+      (error) => {
+        setReportingError("Failed to fetch GPS coordinates. Please grant location permissions.");
+        setIsReportingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  const handleReportSubmit = async (e: React.FormEvent, force = false) => {
+    e.preventDefault();
+    setReportingError(null);
+
+    if (reportLatitude === null || reportLongitude === null) {
+      setReportingError("GPS coordinates are required. Please capture your location first.");
+      return;
+    }
+    if (!reportName.trim()) {
+      setReportingError("Please enter a location name.");
+      return;
+    }
+    if (!reportAddress.trim()) {
+      setReportingError("Please enter an address.");
+      return;
+    }
+    if (!reportCity.trim()) {
+      setReportingError("Please enter a city.");
+      return;
+    }
+
+    try {
+      const payload = {
+        name: reportName,
+        latitude: reportLatitude,
+        longitude: reportLongitude,
+        address: reportAddress,
+        city: reportCity,
+        state: reportState || "State",
+        country: reportCountry || "India",
+        estimatedPeople: reportEstimatedPeople,
+        needCategory: reportCategory,
+        description: reportDescription,
+        evidenceUrl: reportEvidenceUrl,
+        validFrom: new Date(reportTimeObserved).toISOString()
+      };
+
+      const res = await axios.post(`/api/v1/zones/community-needs?force=${force}`, payload);
+      setReportingSuccess(true);
+      fetchVolunteerData();
+      setTimeout(() => {
+        setIsReportModalOpen(false);
+        resetReportForm();
+      }, 2000);
+    } catch (err: any) {
+      if (err.response?.status === 409) {
+        setDuplicateWarning(true);
+        setExistingDuplicateZone(err.response.data.existingZone);
+      } else {
+        setReportingError(err.response?.data?.message || "Failed to submit community need report.");
+      }
+    }
+  };
+
+  const handleConfirmExistingDuplicate = async () => {
+    if (!existingDuplicateZone) return;
+    setReportingError(null);
+    try {
+      const payload = {
+        estimatedPeople: reportEstimatedPeople,
+        description: reportDescription
+      };
+      await axios.post(`/api/v1/zones/community-needs/${existingDuplicateZone.id}/confirm`, payload);
+      setReportingSuccess(true);
+      fetchVolunteerData();
+      setTimeout(() => {
+        setIsReportModalOpen(false);
+        resetReportForm();
+      }, 2000);
+    } catch (err: any) {
+      setReportingError(err.response?.data?.message || "Failed to confirm existing community need.");
+    }
+  };
 
   const [loading, setLoading] = useState(true);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
@@ -652,8 +797,8 @@ export const VolunteerDashboard: React.FC = () => {
       {showCompletedReward && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl border border-natural-border shadow-xl max-w-md w-full p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="w-14 h-14 bg-brand-50 border border-brand-100 text-brand-600 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce">
-              🎉
+            <div className="w-14 h-14 bg-brand-50 border border-brand-100 text-brand-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
+              <PartyPopper className="w-8 h-8 text-brand-600" />
             </div>
             <div>
               <span className="text-[10px] uppercase tracking-widest text-brand-500 font-extrabold block">Delivery Success</span>
@@ -706,7 +851,13 @@ export const VolunteerDashboard: React.FC = () => {
               {activeTask.status.replace(/_/g, ' ')}
             </span>
           )}
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-800 text-[9px] font-bold font-mono tracking-wider uppercase">
+          <button
+            onClick={() => { resetReportForm(); setIsReportModalOpen(true); }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-natural-border hover:bg-[#FAF9F5]/80 text-natural-text text-[9px] font-mono tracking-wider font-bold uppercase transition-all bg-white shadow-xs"
+          >
+            <MapPin className="w-3.5 h-3.5 text-brand-600" /> Report Community Need
+          </button>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-55/10 border border-emerald-100 text-emerald-800 text-[9px] font-bold font-mono tracking-wider uppercase">
             GPS Streaming Live
           </span>
         </div>
@@ -727,7 +878,7 @@ export const VolunteerDashboard: React.FC = () => {
       {showDetourWarning && (
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start space-x-2.5 text-left font-semibold animate-bounce">
           <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
-          <span>⚠ Detour warning: You are currently moving away from your active delivery route bounds ({activeTask.status.includes('PICKUP') ? distanceToPickup.toFixed(1) : distanceToDestination.toFixed(1)} km away).</span>
+          <span>Detour warning: You are currently moving away from your active delivery route bounds ({activeTask.status.includes('PICKUP') ? distanceToPickup.toFixed(1) : distanceToDestination.toFixed(1)} km away).</span>
         </div>
       )}
       {gpsAccuracyWarning && (
@@ -780,7 +931,7 @@ export const VolunteerDashboard: React.FC = () => {
             
             {loadingRouteGeometry && (
               <div className="text-[10px] text-brand-600 mt-2 font-bold font-mono animate-pulse">
-                ⏳ Recalculating actual road routing geometry via OSRM...
+                <Loader2 className="w-3 h-3 inline mr-1 animate-spin text-brand-600 align-text-bottom" /> Recalculating actual road routing geometry via OSRM...
               </div>
             )}
           </div>
@@ -892,7 +1043,7 @@ export const VolunteerDashboard: React.FC = () => {
                   </p>
                   {verificationData && (
                     <div className="text-[9px] text-accent-700 bg-accent-50 border border-accent-100 p-2.5 rounded-lg flex items-center space-x-1.5 font-mono font-bold">
-                      <span>💡 <strong>Simulation OTP:</strong> <code>{verificationData.pickupOtp}</code></span>
+                      <span><Lightbulb className="w-3.5 h-3.5 inline mr-1 text-accent-700 align-text-bottom" /> <strong>Simulation OTP:</strong> <code>{verificationData.pickupOtp}</code></span>
                     </div>
                   )}
                   <div className="flex space-x-2">
@@ -960,7 +1111,7 @@ export const VolunteerDashboard: React.FC = () => {
 
                   {verificationData && (
                     <div className="text-[9px] text-accent-700 bg-accent-50 border border-accent-100 p-2.5 rounded-lg flex items-center space-x-1.5 font-mono font-bold">
-                      <span>💡 <strong>Simulation OTP:</strong> <code>{verificationData.deliveryOtp}</code></span>
+                      <span><Lightbulb className="w-3.5 h-3.5 inline mr-1 text-accent-700 align-text-bottom" /> <strong>Simulation OTP:</strong> <code>{verificationData.deliveryOtp}</code></span>
                     </div>
                   )}
                   <div className="flex space-x-2">
@@ -991,7 +1142,7 @@ export const VolunteerDashboard: React.FC = () => {
 
                   {activeTask.status === 'PHOTO_REJECTED' && (
                     <div className="p-3 bg-red-55/10 border border-red-200 text-[11px] text-red-700 rounded-xl leading-normal font-semibold">
-                      ❌ Verification rejected. Photo matched duplicate hashes or failed content metrics. Please upload a genuine, distinct picture.
+                      <span className="flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5 text-red-650 shrink-0" /> Verification rejected. Photo matched duplicate hashes or failed content metrics. Please upload a genuine, distinct picture.</span>
                     </div>
                   )}
 
@@ -1051,7 +1202,7 @@ export const VolunteerDashboard: React.FC = () => {
               {/* STATE: PENDING VERIFICATION (ML service down/uncertain fallback) */}
               {activeTask.status === 'PENDING_VERIFICATION' && (
                 <div className="bg-amber-50 border border-amber-200 p-5 rounded-xl text-center space-y-3.5">
-                  <div className="text-2xl">⏳</div>
+                  <Clock className="w-8 h-8 mx-auto text-amber-600 animate-pulse" />
                   <div>
                     <h4 className="font-bold text-amber-800 text-xs uppercase tracking-wider">Proof Validation Pending</h4>
                     <p className="text-xs text-amber-700 mt-2 font-medium leading-relaxed">
@@ -1077,14 +1228,22 @@ export const VolunteerDashboard: React.FC = () => {
                   <div>
                     <h4 className="font-bold text-natural-text text-xs uppercase tracking-wider">AI Proof Validation Auditing</h4>
                     <div className="text-left max-w-xs mx-auto space-y-2 mt-4 text-[10px] font-bold text-natural-muted font-mono">
-                      <div className="flex items-center gap-1.5 text-brand-600">✓ Metadata Signature received</div>
-                      <div className="flex items-center gap-1.5 text-brand-600">✓ GPS Location verified</div>
+                      <div className="flex items-center gap-1.5 text-brand-700"><Check className="w-3.5 h-3.5 stroke-[3] text-brand-650 shrink-0" /> Metadata Signature received</div>
+                      <div className="flex items-center gap-1.5 text-brand-700"><Check className="w-3.5 h-3.5 stroke-[3] text-brand-650 shrink-0" /> GPS Location verified</div>
                       
-                      <div className={activeTask.status === 'VERIFIED' || activeTask.status === 'REWARD_CREDITED' ? 'text-brand-600' : 'text-brand-400 animate-pulse'}>
-                        {activeTask.status === 'VERIFIED' || activeTask.status === 'REWARD_CREDITED' ? '✓ Image approved' : '● Running AI object inference...'}
+                      <div className={`flex items-center gap-1.5 ${activeTask.status === 'VERIFIED' || activeTask.status === 'REWARD_CREDITED' ? 'text-brand-700' : 'text-brand-400 animate-pulse'}`}>
+                        {activeTask.status === 'VERIFIED' || activeTask.status === 'REWARD_CREDITED' ? (
+                          <><Check className="w-3.5 h-3.5 stroke-[3] text-brand-650 shrink-0" /> Image approved</>
+                        ) : (
+                          <><Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> Running AI object inference...</>
+                        )}
                       </div>
-                      <div className={activeTask.status === 'REWARD_CREDITED' ? 'text-brand-600 font-black' : 'text-brand-400 animate-pulse font-black'}>
-                        {activeTask.status === 'REWARD_CREDITED' ? '✓ Coins credited' : '● Processing reward tokens...'}
+                      <div className={`flex items-center gap-1.5 ${activeTask.status === 'REWARD_CREDITED' ? 'text-brand-700 font-black' : 'text-brand-400 animate-pulse font-black'}`}>
+                        {activeTask.status === 'REWARD_CREDITED' ? (
+                          <><Check className="w-3.5 h-3.5 stroke-[3] text-brand-650 shrink-0" /> Coins credited</>
+                        ) : (
+                          <><Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> Processing reward tokens...</>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1105,7 +1264,7 @@ export const VolunteerDashboard: React.FC = () => {
                               ? 'bg-accent-500 border-accent-600 text-white shadow-sm animate-pulse' 
                               : 'bg-white text-gray-300 border-gray-200'
                         }`}>
-                          {stp.done ? '✓' : idx + 1}
+                          {stp.done ? <Check className="w-2.5 h-2.5 stroke-[4]" /> : idx + 1}
                         </div>
                         {idx < 5 && <div className={`w-0.5 h-5 ${stp.done ? 'bg-brand-600' : 'bg-gray-150'} mt-1`}></div>}
                       </div>
@@ -1125,7 +1284,7 @@ export const VolunteerDashboard: React.FC = () => {
                   onClick={handleCancelTask}
                   className="w-full py-2 bg-red-55/10 hover:bg-red-50 text-red-650 border border-red-100 font-bold text-[9px] rounded-lg transition-colors uppercase tracking-widest text-center animate-none"
                 >
-                  ✖ Release Active Rescue Task
+                  <X className="w-3.5 h-3.5 inline mr-1 text-red-650 align-text-bottom" /> Release Active Rescue Task
                 </button>
               </div>
             </div>
@@ -1162,7 +1321,9 @@ export const VolunteerDashboard: React.FC = () => {
                 <span className="text-[9px] uppercase font-bold tracking-wider text-natural-muted flex items-center gap-1.5">
                   <Award className="w-3.5 h-3.5 text-brand-500" /> Community Rating
                 </span>
-                <div className="text-2xl font-mono font-black text-natural-text mt-2">★ {vStats.rating.toFixed(1)}</div>
+                <div className="text-2xl font-mono font-black text-natural-text mt-2 flex items-center gap-1.5">
+                  <Star className="w-5 h-5 fill-brand-650 text-brand-650" /> {vStats.rating.toFixed(1)}
+                </div>
               </div>
               <span className="text-[8px] text-natural-muted mt-2 font-semibold block uppercase">Kitchen feedback score</span>
             </div>
@@ -1182,7 +1343,9 @@ export const VolunteerDashboard: React.FC = () => {
                 <span className="text-[9px] uppercase font-bold tracking-wider text-brand-700 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-accent-500" /> Token Wallet
                 </span>
-                <div className="text-2xl font-mono font-black text-brand-600 mt-2">🪙 {vStats.tokens} coins</div>
+                <div className="text-2xl font-mono font-black text-brand-600 mt-2 flex items-center gap-1.5">
+                  <Coins className="w-5 h-5 text-brand-600" /> {vStats.tokens} coins
+                </div>
               </div>
               <span className="text-[8px] text-brand-600 mt-2 font-bold block uppercase">Claim dining coupon discount</span>
             </div>
@@ -1213,7 +1376,7 @@ export const VolunteerDashboard: React.FC = () => {
               </div>
 
               <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border mt-3 text-[10px] text-natural-muted font-medium text-left leading-relaxed">
-                📍 <strong>Live GPS stream:</strong> Geolocation updates will continuously stream from your browser device sensor to map matching algorithms.
+                <MapPin className="w-3.5 h-3.5 inline mr-1 text-brand-650 align-text-bottom" /> <strong>Live GPS stream:</strong> Geolocation updates will continuously stream from your browser device sensor to map matching algorithms.
               </div>
             </div>
 
@@ -1255,14 +1418,26 @@ export const VolunteerDashboard: React.FC = () => {
                 {activeTab === 'MATCHES' && (
                   <div>
                     {recommendations.length === 0 ? (
-                      <div className="p-12 text-center text-natural-muted space-y-4 flex flex-col items-center justify-center">
-                        <div className="w-24 h-24 opacity-80 shrink-0">
-                          <img src={foodRescueImg} alt="No Food Matches" className="w-full h-full object-contain animate-pulse" />
+                      <div className="p-12 text-center text-natural-muted space-y-4 flex flex-col items-center justify-center text-left">
+                        <div className="w-20 h-20 opacity-80 shrink-0 mx-auto">
+                          <img src={foodRescueImg} alt="No Food Matches" className="w-full h-full object-contain" />
                         </div>
-                        <p className="text-xs font-semibold">No surplus food listings match your commute pathways.</p>
-                        <Link to="/volunteer/routes" className="btn-secondary normal-case text-xs">
-                          Configure Commute Routes
-                        </Link>
+                        <h4 className="text-sm font-display font-black text-natural-text text-center uppercase tracking-tight">Find Food Along Your Route</h4>
+                        <p className="text-xs font-semibold text-natural-muted text-center max-w-sm">No verified food-need locations are currently available along your route.</p>
+                        <div className="border-t border-natural-border pt-4 w-full text-center space-y-3">
+                          <p className="text-xs font-bold text-natural-text">Know a location where people need food?</p>
+                          <button
+                            onClick={() => { resetReportForm(); setIsReportModalOpen(true); }}
+                            className="btn-primary py-2 px-4 text-xs tracking-wider font-mono uppercase inline-flex items-center gap-1.5 mx-auto"
+                          >
+                            Report Community Need
+                          </button>
+                        </div>
+                        <div className="text-center pt-2 w-full">
+                          <Link to="/volunteer/routes" className="text-[10px] font-bold text-brand-650 hover:underline uppercase">
+                            Configure Commute Routes
+                          </Link>
+                        </div>
                       </div>
                     ) : (
                       <div className="divide-y divide-natural-border">
@@ -1294,7 +1469,7 @@ export const VolunteerDashboard: React.FC = () => {
                                   {rec.foodListing.imageUrl ? (
                                     <img src={rec.foodListing.imageUrl} alt={rec.foodListing.foodName} className="w-full h-full object-cover" />
                                   ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-xl bg-brand-50">🍲</div>
+                                    <div className="w-full h-full flex items-center justify-center bg-brand-50 text-brand-650"><Utensils className="w-5 h-5" /></div>
                                   )}
                                   <span className={`absolute top-1 left-1 text-[7px] font-black px-1 py-0.5 rounded tracking-wide border shadow-xs ${
                                     isVeg ? 'bg-emerald-55/10 text-emerald-800 border-emerald-250' : 'bg-rose-50 text-rose-700 border-rose-200'
@@ -1305,8 +1480,8 @@ export const VolunteerDashboard: React.FC = () => {
 
                                 <div className="flex-1 min-w-0 text-left space-y-1 text-xs">
                                   <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-black uppercase font-mono">
-                                      ★ {rec.matchingScore}% {matchQuality}
+                                    <span className="text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-black uppercase font-mono flex items-center gap-0.5">
+                                      <Star className="w-2.5 h-2.5 fill-brand-650 text-brand-650" /> {rec.matchingScore}% {matchQuality}
                                     </span>
                                     <span className="text-[8px] bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5 rounded font-bold font-mono">
                                       Detour: {rec.deviation.toFixed(1)} km
@@ -1337,13 +1512,28 @@ export const VolunteerDashboard: React.FC = () => {
                               <div className="pt-2 border-t border-natural-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs bg-white">
                                 <div className="text-[10px] space-y-0.5 text-natural-muted font-medium flex-1 min-w-0">
                                   <div className="truncate"><span className="font-bold text-natural-text uppercase text-[8px] tracking-wider mr-1">Pickup:</span> {rec.foodListing.pickupAddress}</div>
-                                  <div className="truncate"><span className="font-bold text-natural-text uppercase text-[8px] tracking-wider mr-1">Destination:</span> {rec.zone.name}</div>
+                                  <div className="truncate">
+                                    <span className="font-bold text-natural-text uppercase text-[8px] tracking-wider mr-1">Destination:</span> 
+                                    {rec.zone.name}
+                                    <span className={`ml-2 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                      rec.zone.source === 'COMMUNITY_REPORTED'
+                                        ? 'bg-amber-50 text-amber-850 border border-amber-250' 
+                                        : 'bg-brand-50 text-brand-700 border border-brand-100'
+                                    }`}>
+                                      {rec.zone.source === 'COMMUNITY_REPORTED' ? 'Verified community report' : 'Verified destination'}
+                                    </span>
+                                  </div>
+                                  <div className="text-[9px] font-mono font-semibold text-natural-muted mt-0.5">
+                                    {rec.distanceToDestination ? rec.distanceToDestination.toFixed(1) : '2.1'} km ahead • {rec.deviation.toFixed(1)} km route deviation
+                                  </div>
                                 </div>
 
                                 <div className="flex items-center justify-between gap-3 shrink-0 self-end sm:self-auto">
                                   <div className="text-right">
                                     <span className="text-[8px] uppercase font-bold text-brand-700 tracking-wider block font-mono font-black">Est Payout</span>
-                                    <strong className="text-xs font-mono font-black text-brand-600">🪙 {expectedCoins} coins</strong>
+                                    <strong className="text-xs font-mono font-black text-brand-600 flex items-center gap-1">
+                                      <Coins className="w-3.5 h-3.5" /> {expectedCoins} coins
+                                    </strong>
                                   </div>
                                   <button
                                     onClick={(e) => {
@@ -1480,6 +1670,255 @@ export const VolunteerDashboard: React.FC = () => {
 
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Report Community Need Modal */}
+      {isReportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-natural-text/40 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-natural-border shadow-lg max-w-lg w-full max-h-[90vh] flex flex-col text-left overflow-hidden">
+            {/* Header */}
+            <div className="p-5 border-b border-natural-border flex justify-between items-center bg-[#FAF9F5]">
+              <h3 className="font-display font-black text-xs uppercase tracking-wider text-natural-text">Report Community Need</h3>
+              <button onClick={() => { setIsReportModalOpen(false); resetReportForm(); }} className="text-natural-muted hover:text-natural-text transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Form */}
+            <form onSubmit={(e) => handleReportSubmit(e, false)} className="flex-1 overflow-y-auto p-6 space-y-4">
+              
+              {reportingError && (
+                <div className="p-3 bg-red-55/15 border border-red-200 text-red-800 text-xs rounded-xl flex items-start gap-2 font-semibold">
+                  <AlertCircle className="w-4.5 h-4.5 shrink-0 mt-0.5" />
+                  <span>{reportingError}</span>
+                </div>
+              )}
+
+              {reportingSuccess && (
+                <div className="p-3 bg-emerald-55/10 border border-emerald-250 text-emerald-800 text-xs rounded-xl flex items-start gap-2 font-semibold">
+                  <Check className="w-4.5 h-4.5 shrink-0 mt-0.5" />
+                  <span>Thank you! Your report has been submitted for verification.</span>
+                </div>
+              )}
+
+              {duplicateWarning && (
+                <div className="p-4 bg-amber-50 border border-amber-250 rounded-xl space-y-3">
+                  <div className="flex items-start gap-2 text-xs font-semibold text-amber-850">
+                    <AlertTriangle className="w-4.5 h-4.5 text-amber-600 shrink-0 mt-0.5" />
+                    <span>A similar community need location already exists nearby:</span>
+                  </div>
+                  {existingDuplicateZone && (
+                    <div className="text-[11px] bg-white border border-amber-200 rounded-lg p-2 font-semibold font-mono space-y-1">
+                      <div>Name: {existingDuplicateZone.name}</div>
+                      <div>Address: {existingDuplicateZone.address}</div>
+                      <div>People: ~{existingDuplicateZone.estimatedPeople} • Reports: {existingDuplicateZone.reportCount}</div>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-natural-muted font-semibold">
+                    You can confirm this existing location (to strengthen its confidence signals) or submit yours anyway if you believe it is different.
+                  </p>
+                  <div className="flex gap-2 pt-1.5">
+                    <button
+                      type="button"
+                      onClick={handleConfirmExistingDuplicate}
+                      className="btn-primary text-[10px] py-1.5 px-3 uppercase tracking-wider font-mono"
+                    >
+                      Confirm Existing Location
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleReportSubmit(e, true)}
+                      className="btn-secondary text-[10px] py-1.5 px-3 uppercase tracking-wider font-mono bg-white"
+                    >
+                      Submit Anyway
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Form inputs */}
+              {!duplicateWarning && !reportingSuccess && (
+                <>
+                  {/* GPS Capture Button */}
+                  <div className="bg-[#FAF9F5] border border-natural-border rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center text-xs font-bold text-natural-text">
+                      <span>1. Capture GPS Location</span>
+                      {reportLatitude !== null && reportLongitude !== null && (
+                        <span className="text-[9px] font-mono font-black text-brand-700 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded uppercase">
+                          Location Secured
+                        </span>
+                      )}
+                    </div>
+                    
+                    {reportLatitude !== null && reportLongitude !== null ? (
+                      <div className="text-[10px] font-mono text-natural-muted space-y-1 font-semibold">
+                        <div>Latitude: {reportLatitude.toFixed(6)}</div>
+                        <div>Longitude: {reportLongitude.toFixed(6)}</div>
+                        <div>Accuracy: ±{Math.round(reportGpsAccuracy || 0)} meters</div>
+                      </div>
+                    ) : (
+                      <p className="text-[10.5px] text-natural-muted font-semibold">
+                        The platform requires precise device coordinates to verify community need points. Handheld address lookup is restricted.
+                      </p>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={isReportingLocation}
+                      onClick={captureReportGpsLocation}
+                      className="btn-secondary w-full py-2 text-xs uppercase font-mono tracking-wider flex items-center justify-center gap-1.5 bg-white border border-natural-border"
+                    >
+                      {isReportingLocation ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Capturing Coordinates...
+                        </>
+                      ) : (
+                        <>
+                          <Navigation className="w-3.5 h-3.5 text-brand-650" /> Capture My GPS Location
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Address Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5 text-xs font-bold text-natural-text">
+                      <label className="block">Location Name / Landmark</label>
+                      <input
+                        type="text"
+                        required
+                        value={reportName}
+                        onChange={(e) => setReportName(e.target.value)}
+                        placeholder="e.g. Near Kalayan Shelter Care"
+                        className="w-full border border-natural-border rounded-lg p-2.5 bg-[#FAF9F5] focus:outline-none focus:border-brand-500 font-semibold"
+                      />
+                    </div>
+                    <div className="space-y-1.5 text-xs font-bold text-natural-text">
+                      <label className="block">Street Address</label>
+                      <input
+                        type="text"
+                        required
+                        value={reportAddress}
+                        onChange={(e) => setReportAddress(e.target.value)}
+                        placeholder="e.g. 100 Feet Road, Indiranagar"
+                        className="w-full border border-natural-border rounded-lg p-2.5 bg-[#FAF9F5] focus:outline-none focus:border-brand-500 font-semibold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* City, State, Country */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="space-y-1.5 text-xs font-bold text-natural-text">
+                      <label className="block">City</label>
+                      <input
+                        type="text"
+                        required
+                        value={reportCity}
+                        onChange={(e) => setReportCity(e.target.value)}
+                        placeholder="e.g. Bengaluru"
+                        className="w-full border border-natural-border rounded-lg p-2 bg-[#FAF9F5] focus:outline-none focus:border-brand-500 font-semibold"
+                      />
+                    </div>
+                    <div className="space-y-1.5 text-xs font-bold text-natural-text">
+                      <label className="block">State</label>
+                      <input
+                        type="text"
+                        value={reportState}
+                        onChange={(e) => setReportState(e.target.value)}
+                        placeholder="e.g. Karnataka"
+                        className="w-full border border-natural-border rounded-lg p-2 bg-[#FAF9F5] focus:outline-none focus:border-brand-500 font-semibold"
+                      />
+                    </div>
+                    <div className="space-y-1.5 text-xs font-bold text-natural-text">
+                      <label className="block">Country</label>
+                      <input
+                        type="text"
+                        value={reportCountry}
+                        onChange={(e) => setReportCountry(e.target.value)}
+                        placeholder="e.g. India"
+                        className="w-full border border-natural-border rounded-lg p-2 bg-[#FAF9F5] focus:outline-none focus:border-brand-500 font-semibold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Est People & Category */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5 text-xs font-bold text-natural-text">
+                      <label className="block">Estimated People in Need</label>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={reportEstimatedPeople}
+                        onChange={(e) => setReportEstimatedPeople(parseInt(e.target.value) || 1)}
+                        className="w-full border border-natural-border rounded-lg p-2.5 bg-[#FAF9F5] focus:outline-none focus:border-brand-500 font-semibold"
+                      />
+                    </div>
+                    <div className="space-y-1.5 text-xs font-bold text-natural-text">
+                      <label className="block">Need Category</label>
+                      <select
+                        value={reportCategory}
+                        onChange={(e) => setReportCategory(e.target.value)}
+                        className="w-full border border-natural-border rounded-lg p-2.5 bg-[#FAF9F5] focus:outline-none focus:border-brand-500 font-semibold font-mono"
+                      >
+                        <option value="FOOD">FOOD SUPPORT</option>
+                        <option value="SHELTER">SHELTER NEED</option>
+                        <option value="WATER">CLEAN WATER</option>
+                        <option value="OTHER">OTHER SUPPORT</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Time Observed */}
+                  <div className="space-y-1.5 text-xs font-bold text-natural-text">
+                    <label className="block">Time Observed</label>
+                    <input
+                      type="datetime-local"
+                      required
+                      value={reportTimeObserved}
+                      onChange={(e) => setReportTimeObserved(e.target.value)}
+                      className="w-full border border-natural-border rounded-lg p-2.5 bg-[#FAF9F5] focus:outline-none focus:border-brand-500 font-semibold font-mono"
+                    />
+                  </div>
+
+                  {/* Description & Evidence */}
+                  <div className="space-y-1.5 text-xs font-bold text-natural-text">
+                    <label className="block">Observation Description</label>
+                    <textarea
+                      required
+                      rows={2}
+                      value={reportDescription}
+                      onChange={(e) => setReportDescription(e.target.value)}
+                      placeholder="Explain what was observed (e.g. community members gathered awaiting food service)."
+                      className="w-full border border-natural-border rounded-lg p-2.5 bg-[#FAF9F5] focus:outline-none focus:border-brand-500 font-semibold"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 text-xs font-bold text-natural-text">
+                    <label className="block">Evidence Photo URL (Optional)</label>
+                    <input
+                      type="url"
+                      value={reportEvidenceUrl}
+                      onChange={(e) => setReportEvidenceUrl(e.target.value)}
+                      placeholder="e.g. https://storage.platform.org/evidence.jpg"
+                      className="w-full border border-natural-border rounded-lg p-2.5 bg-[#FAF9F5] focus:outline-none focus:border-brand-500 font-semibold"
+                    />
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      className="btn-primary w-full py-2.5 text-xs uppercase font-mono tracking-wider font-bold"
+                    >
+                      Submit Community Report
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
           </div>
         </div>
       )}

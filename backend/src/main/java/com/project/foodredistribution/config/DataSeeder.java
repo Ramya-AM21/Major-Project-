@@ -26,6 +26,7 @@ public class DataSeeder implements CommandLineRunner {
     private final VerificationRepository verificationRepository;
     private final PasswordEncoder passwordEncoder;
     private final RestaurantRewardRepository restaurantRewardRepository;
+    private final CityDataCoverageRepository cityDataCoverageRepository;
 
     public DataSeeder(UserRepository userRepository,
                       FoodProviderRepository foodProviderRepository,
@@ -36,7 +37,8 @@ public class DataSeeder implements CommandLineRunner {
                       DeliveryTaskRepository deliveryTaskRepository,
                       VerificationRepository verificationRepository,
                       PasswordEncoder passwordEncoder,
-                      RestaurantRewardRepository restaurantRewardRepository) {
+                      RestaurantRewardRepository restaurantRewardRepository,
+                      CityDataCoverageRepository cityDataCoverageRepository) {
         this.userRepository = userRepository;
         this.foodProviderRepository = foodProviderRepository;
         this.volunteerRepository = volunteerRepository;
@@ -47,6 +49,7 @@ public class DataSeeder implements CommandLineRunner {
         this.verificationRepository = verificationRepository;
         this.passwordEncoder = passwordEncoder;
         this.restaurantRewardRepository = restaurantRewardRepository;
+        this.cityDataCoverageRepository = cityDataCoverageRepository;
     }
 
     @Override
@@ -155,22 +158,51 @@ public class DataSeeder implements CommandLineRunner {
         r2.setActiveUntil("09:00 AM");
         volunteerRouteRepository.save(r2);
 
+        // 4b. Seed City Data Coverage
+        cityDataCoverageRepository.save(new CityDataCoverage("Bengaluru", "Karnataka", "India", true, "GOVERNMENT,OFFICIAL_DATABASE,VERIFIED_NGO"));
+        cityDataCoverageRepository.save(new CityDataCoverage("Mysore", "Karnataka", "India", false, "COMMUNITY_REPORTED"));
+        cityDataCoverageRepository.save(new CityDataCoverage("Tier-3 City X", "Karnataka", "India", false, "COMMUNITY_REPORTED"));
+
         // 5. Seed Zones
         List<Zone> zones = new ArrayList<>();
         Zone z1 = new Zone("Central Community Zone", 12.9740, 77.6050, "Cubbon Road Shelter, Ashok Nagar, Bengaluru", 150, "08:00 AM - 09:00 PM");
         z1.setPriorityScore(8.5); // High priority
+        z1.setCity("Bengaluru");
+        z1.setState("Karnataka");
+        z1.setCountry("India");
+        z1.setSource("OFFICIAL_DATABASE");
+        z1.setType("VERIFIED_SHELTER");
+        z1.setVerificationStatus("VERIFIED");
         zones.add(zoneRepository.save(z1));
 
         Zone z2 = new Zone("North Shelter Zone", 13.0180, 77.5820, "Malleswaram Community Kitchen, Malleswaram, Bengaluru", 120, "09:00 AM - 08:00 PM");
         z2.setPriorityScore(5.2);
+        z2.setCity("Bengaluru");
+        z2.setState("Karnataka");
+        z2.setCountry("India");
+        z2.setSource("GOVERNMENT");
+        z2.setType("GOVERNMENT_SHELTER");
+        z2.setVerificationStatus("VERIFIED");
         zones.add(zoneRepository.save(z2));
 
         Zone z3 = new Zone("Transit Support Zone", 12.9510, 77.5840, "Kalayan Shelter Care, Mavalli, Bengaluru", 200, "24 Hours");
         z3.setPriorityScore(9.2); // Extremely High
+        z3.setCity("Bengaluru");
+        z3.setState("Karnataka");
+        z3.setCountry("India");
+        z3.setSource("VERIFIED_NGO");
+        z3.setType("NGO");
+        z3.setVerificationStatus("VERIFIED");
         zones.add(zoneRepository.save(z3));
 
         Zone z4 = new Zone("South Community Zone", 12.9120, 77.6110, "BTM Layout Food Center, Koramangala 1st Block, Bengaluru", 100, "08:00 AM - 10:00 PM");
         z4.setPriorityScore(3.8);
+        z4.setCity("Bengaluru");
+        z4.setState("Karnataka");
+        z4.setCountry("India");
+        z4.setSource("OFFICIAL_DATABASE");
+        z4.setType("VERIFIED_SHELTER");
+        z4.setVerificationStatus("VERIFIED");
         zones.add(zoneRepository.save(z4));
 
         // 6. Seed Food Listings across various states

@@ -176,7 +176,33 @@ public class VolunteerService {
                 validListings.add(food);
             }
         }
-        List<Zone> zones = zoneRepository.findAll();
+        List<Zone> allZones = zoneRepository.findAll();
+        List<Zone> zones = new java.util.ArrayList<>();
+        for (Zone z : allZones) {
+            if ("VERIFIED".equalsIgnoreCase(z.getVerificationStatus())) {
+                // Check expiry
+                if (z.getValidUntil() != null && z.getValidUntil().isBefore(now)) {
+                    z.setVerificationStatus("EXPIRED");
+                    z.setStatus("INACTIVE");
+                    zoneRepository.save(z);
+                    continue;
+                }
+                // Check stale (30 days re-verification window)
+                if ("COMMUNITY_NEED_POINT".equalsIgnoreCase(z.getType())) {
+                    java.time.LocalDateTime lastVer = z.getLastVerifiedAt();
+                    if (lastVer == null) {
+                        lastVer = z.getCreatedAt();
+                    }
+                    if (lastVer != null && lastVer.isBefore(now.minusDays(30))) {
+                        z.setVerificationStatus("REQUIRES_REVIEW");
+                        z.setStatus("INACTIVE");
+                        zoneRepository.save(z);
+                        continue;
+                    }
+                }
+                zones.add(z);
+            }
+        }
 
         List<TaskMatchRecommendation> recommendations = new ArrayList<>();
 

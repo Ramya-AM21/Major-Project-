@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Award, CheckCircle, Tag, Clock, AlertTriangle, AlertCircle, Sparkles, Receipt, Percent } from 'lucide-react';
+import { Award, CheckCircle, Tag, Clock, AlertTriangle, AlertCircle, Sparkles, Receipt, Percent, Coins } from 'lucide-react';
 import axios from 'axios';
 import communityRewardImg from '../assets/community_reward.png';
 
@@ -101,7 +101,7 @@ export const VolunteerRewards: React.FC = () => {
 
         {/* Balance Card styled like Shopify metrics */}
         <div className="bg-white border border-natural-border py-2 px-4 rounded-xl flex items-center space-x-3 text-left shadow-xs self-start sm:self-auto min-w-[170px]">
-          <div className="w-10 h-10 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center font-bold text-xl text-brand-700">🪙</div>
+          <div className="w-10 h-10 rounded-lg bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-700"><Coins className="w-5 h-5" /></div>
           <div>
             <span className="text-[9px] uppercase font-black text-natural-muted block leading-none">Wallet Balance</span>
             <span className="text-xs font-mono font-black text-natural-text mt-1.5 block leading-none">{walletBalance} points</span>
@@ -182,7 +182,7 @@ export const VolunteerRewards: React.FC = () => {
                           <Percent className="w-3 h-3" /> {itm.discountPercentage}% Discount
                         </span>
                         <span className="text-xs font-mono font-black text-natural-text flex items-center gap-1">
-                          🪙 {itm.requiredCoins} pts
+                          <Coins className="w-3.5 h-3.5" /> {itm.requiredCoins} pts
                         </span>
                       </div>
                       <h4 className="font-display font-bold text-sm text-natural-text pt-2 border-t border-natural-border/60">{itm.restaurantName}</h4>

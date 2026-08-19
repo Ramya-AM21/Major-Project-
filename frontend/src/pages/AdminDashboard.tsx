@@ -42,16 +42,23 @@ export const AdminDashboard: React.FC = () => {
   const [predictionData, setPredictionData] = useState<any>(null);
   const [predictLoading, setPredictLoading] = useState(false);
 
+  // Pending Community Need Reports states
+  const [pendingNeeds, setPendingNeeds] = useState<any[]>([]);
+  const [needsLoading, setNeedsLoading] = useState(true);
+
   const fetchAdminConsole = async () => {
     try {
-      const [statsRes, tasksRes, zonesRes] = await Promise.all([
+      const [statsRes, tasksRes, zonesRes, needsRes] = await Promise.all([
         axios.get('/api/v1/analytics/admin'),
         axios.get('/api/v1/tasks'),
-        axios.get('/api/v1/zones')
+        axios.get('/api/v1/zones'),
+        axios.get('/api/v1/zones/community-needs/pending')
       ]);
 
       setStats(statsRes.data);
       setZones(zonesRes.data || []);
+      setPendingNeeds(needsRes.data || []);
+      setNeedsLoading(false);
 
       // Compile anomalies based on tasks with verification confidence score < 75% or custom travel speed anomalies
       const suspiciousList: AnomalyEvent[] = [];
@@ -104,6 +111,33 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     fetchAdminConsole();
   }, []);
+
+  const handleVerifyNeed = async (id: string) => {
+    try {
+      await axios.put(`/api/v1/zones/community-needs/${id}/verify`);
+      fetchAdminConsole();
+    } catch {
+      alert("Failed to verify community need.");
+    }
+  };
+
+  const handleRejectNeed = async (id: string) => {
+    try {
+      await axios.put(`/api/v1/zones/community-needs/${id}/reject`);
+      fetchAdminConsole();
+    } catch {
+      alert("Failed to reject community need.");
+    }
+  };
+
+  const handleReviewNeed = async (id: string) => {
+    try {
+      await axios.put(`/api/v1/zones/community-needs/${id}/review`);
+      fetchAdminConsole();
+    } catch {
+      alert("Failed to set community need under review.");
+    }
+  };
 
   const triggerPrediction = async (zone: ShelterZone) => {
     setSelectedZone(zone);
@@ -200,6 +234,107 @@ export const AdminDashboard: React.FC = () => {
                       <Bot className="w-3.5 h-3.5 mr-1" />
                       <span>Forecast demand</span>
                     </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border border-natural-border rounded-2xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-natural-border bg-[#FAF9F5] flex justify-between items-center">
+              <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Community Need Discovery Queue</h3>
+              <span className="text-[9px] bg-amber-55/10 border border-amber-200 text-amber-800 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">
+                Needs Verification
+              </span>
+            </div>
+
+            {needsLoading ? (
+              <div className="p-8 text-center text-natural-muted font-semibold text-xs">Loading pending community reports...</div>
+            ) : pendingNeeds.length === 0 ? (
+              <div className="p-8 text-center text-natural-muted font-semibold text-xs">No pending community reports requiring review.</div>
+            ) : (
+              <div className="divide-y divide-natural-border">
+                {pendingNeeds.map((need) => (
+                  <div key={need.id} className="p-5 flex flex-col space-y-3.5 text-xs text-left bg-white font-semibold text-natural-text">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-bold text-natural-text uppercase text-[12px]">{need.name}</h4>
+                        <p className="text-[10px] text-natural-muted mt-0.5 font-medium">{need.address}, {need.city}, {need.state}, {need.country}</p>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-bold font-mono uppercase tracking-wider border ${
+                        need.verificationStatus === 'UNDER_REVIEW' 
+                          ? 'bg-blue-50 text-blue-800 border-blue-200' 
+                          : need.verificationStatus === 'REQUIRES_REVIEW'
+                          ? 'bg-purple-50 text-purple-800 border-purple-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
+                      }`}>
+                        {need.verificationStatus.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 bg-[#FAF9F5] p-3 rounded-xl border border-natural-border text-[9.5px] font-mono">
+                      <div>
+                        <span className="block text-[7px] uppercase font-bold tracking-wider text-natural-muted font-sans">Need Details</span>
+                        <span className="text-natural-text font-bold block mt-0.5">Category: {need.needCategory}</span>
+                        <span className="text-natural-text font-bold block">Scale: ~{need.estimatedPeople} people</span>
+                      </div>
+                      <div>
+                        <span className="block text-[7px] uppercase font-bold tracking-wider text-natural-muted font-sans">Observation Time</span>
+                        <span className="text-natural-text font-bold block mt-0.5">Reported: {new Date(need.createdAt).toLocaleDateString()}</span>
+                        <span className="text-natural-text font-bold block">Source: {need.source.replace(/_/g, ' ')}</span>
+                      </div>
+                      <div className="col-span-2 pt-1 border-t border-natural-border/50">
+                        <span className="block text-[7px] uppercase font-bold tracking-wider text-natural-muted font-sans">GPS Telemetry</span>
+                        <span className="text-natural-text font-bold block">Coords: {need.latitude.toFixed(6)}, {need.longitude.toFixed(6)}</span>
+                        <span className="text-brand-650 font-bold block">Signals: Reported by {need.reportCount || 1} volunteer(s)</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 bg-[#FAF9F5]/40 p-2.5 rounded-lg border border-natural-border/50 text-[10.5px]">
+                      <span className="block text-[7.5px] uppercase font-bold tracking-wider text-natural-muted">Description & Evidence</span>
+                      <p className="text-natural-text leading-relaxed font-medium">{need.description || 'No observation details provided.'}</p>
+                      {need.evidenceUrl && (
+                        <div className="mt-1">
+                          <a 
+                            href={need.evidenceUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="inline-flex items-center text-[8.5px] font-mono font-bold text-brand-650 hover:underline uppercase"
+                          >
+                            View Evidence Photo ↗
+                          </a>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-natural-border pt-3.5 gap-2">
+                      <span className="text-[8.5px] text-natural-muted font-medium font-sans">
+                        Reported by: {need.reportedBy?.name || 'Volunteer'}
+                      </span>
+                      
+                      <div className="flex gap-2">
+                        {need.verificationStatus !== 'UNDER_REVIEW' && (
+                          <button
+                            onClick={() => handleReviewNeed(need.id)}
+                            className="btn-secondary py-1 px-2.5 text-[9px] uppercase tracking-wider font-mono bg-white border border-natural-border"
+                          >
+                            Review
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleRejectNeed(need.id)}
+                          className="px-2.5 py-1 text-[9px] font-mono font-bold uppercase tracking-wider border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => handleVerifyNeed(need.id)}
+                          className="px-2.5 py-1 text-[9px] font-mono font-bold uppercase tracking-wider border border-brand-200 text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors"
+                        >
+                          Verify Need
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { MapView } from '../components/MapView';
 import { 
   Navigation, MapPin, Compass, AlertCircle, RefreshCw, CheckCircle, Clock, 
-  Award, Shield, Trash2, ArrowRight, Info, ChevronDown, ChevronUp, Search, Loader2
+  Award, Shield, Trash2, ArrowRight, Info, ChevronDown, ChevronUp, Search, Loader2,
+  Star, Coins
 } from 'lucide-react';
 import axios from 'axios';
 import foodRescueImg from '../assets/food_rescue.png';
@@ -829,7 +830,7 @@ export const FindMatchingFood: React.FC = () => {
               </div>
               
               <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border mt-3 text-[10px] text-natural-muted font-bold text-left leading-normal">
-                📍 <strong>Live GPS Updates:</strong> Geolocation updates will continuously stream from your browser device sensor to map matching algorithms.
+                <MapPin className="w-3.5 h-3.5 inline mr-1 text-brand-650 align-text-bottom" /> <strong>Live GPS Updates:</strong> Geolocation updates will continuously stream from your browser device sensor to map matching algorithms.
               </div>
             </div>
 
@@ -879,8 +880,8 @@ export const FindMatchingFood: React.FC = () => {
                         <div className="flex gap-3">
                           <div className="flex-1 space-y-2 text-left">
                             <div className="flex flex-wrap items-center gap-1">
-                              <span className="text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-black uppercase font-mono">
-                                ★ {rec.matchingScore}% {matchQuality}
+                              <span className="text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-black uppercase font-mono flex items-center gap-0.5">
+                                <Star className="w-2.5 h-2.5 fill-brand-650 text-brand-650" /> {rec.matchingScore}% {matchQuality}
                               </span>
                               <span className="text-[8px] bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5 rounded font-bold font-mono">
                                 Detour: {rec.deviation.toFixed(1)} km
@@ -930,15 +931,15 @@ export const FindMatchingFood: React.FC = () => {
                           {isExpanded && (
                             <div className="mt-2 p-2.5 bg-[#FAF9F5] border border-natural-border rounded-lg text-[9px] text-natural-muted space-y-1 font-semibold">
                               <div className="flex items-center justify-between">
-                                <span>✓ High Route Overlap</span>
+                                <span className="flex items-center gap-1"><Check className="w-3 h-3 text-brand-600 shrink-0" /> High Route Overlap</span>
                                 <span className="font-bold text-natural-text">{rec.matchingScore - 15}% overlap</span>
                               </div>
                               <div className="flex items-center justify-between">
-                                <span>✓ Low additional detour deviation</span>
+                                <span className="flex items-center gap-1"><Check className="w-3 h-3 text-brand-600 shrink-0" /> Low detour deviation</span>
                                 <span className="font-bold text-natural-text">+{rec.deviation.toFixed(1)} km detour</span>
                               </div>
                               <div className="flex items-center justify-between">
-                                <span>✓ Expiry Safety Window</span>
+                                <span className="flex items-center gap-1"><Check className="w-3 h-3 text-brand-600 shrink-0" /> Expiry Safety Window</span>
                                 <span className="font-bold text-natural-text">Ready for pickup</span>
                               </div>
                             </div>
@@ -949,7 +950,9 @@ export const FindMatchingFood: React.FC = () => {
                         <div className="pt-2 border-t border-natural-border flex items-center justify-between gap-3 bg-white">
                           <div className="text-left">
                             <span className="text-[8px] uppercase font-bold text-brand-700 tracking-wider font-mono block">Coin payout</span>
-                            <strong className="text-xs font-black text-brand-600 font-mono">🪙 {expectedCoins} pts</strong>
+                            <strong className="text-xs font-black text-brand-600 font-mono flex items-center gap-1">
+                              <Coins className="w-3.5 h-3.5" /> {expectedCoins} pts
+                            </strong>
                           </div>
                           <button
                             type="button"
