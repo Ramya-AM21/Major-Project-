@@ -167,9 +167,10 @@ public class VolunteerService {
         List<VolunteerRoute> routes = volunteerRouteRepository.findByVolunteerId(volunteer.getId());
         List<FoodListing> availableListings = foodListingRepository.findByStatus("AVAILABLE");
         java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        java.time.Instant nowInstant = java.time.Instant.now();
         List<FoodListing> validListings = new java.util.ArrayList<>();
         for (FoodListing food : availableListings) {
-            if (food.getExpiryTime() != null && food.getExpiryTime().isBefore(now)) {
+            if (food.getEffectiveAvailableUntil() != null && food.getEffectiveAvailableUntil().isBefore(nowInstant)) {
                 food.setStatus("EXPIRED");
                 foodListingRepository.save(food);
             } else {

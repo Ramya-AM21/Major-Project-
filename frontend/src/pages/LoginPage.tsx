@@ -392,27 +392,7 @@ export const LoginPage: React.FC = () => {
                 </button>
               </div>
 
-              <div className="p-4 bg-[#FAF9F5] rounded-xl border border-natural-border flex flex-col space-y-1.5 text-left">
-                <span className="text-[9px] font-bold text-natural-text uppercase tracking-wider">DEMO CONSOLE CREDENTIALS:</span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10px] text-natural-muted font-semibold font-mono">
-                  <div>
-                    <span className="block text-[8px] uppercase tracking-wider text-natural-muted font-sans">Provider</span>
-                    <span>provider1@food.com</span>
-                  </div>
-                  <div>
-                    <span className="block text-[8px] uppercase tracking-wider text-natural-muted font-sans">Volunteer</span>
-                    <span>rahul@food.com</span>
-                  </div>
-                  <div>
-                    <span className="block text-[8px] uppercase tracking-wider text-natural-muted font-sans">Admin</span>
-                    <span>admin@food.com</span>
-                  </div>
-                  <div>
-                    <span className="block text-[8px] uppercase tracking-wider text-natural-muted font-sans">Demo Password</span>
-                    <span>password</span>
-                  </div>
-                </div>
-              </div>
+
             </form>
           )}
 

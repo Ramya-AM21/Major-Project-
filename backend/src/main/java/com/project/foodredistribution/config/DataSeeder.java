@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -64,6 +66,10 @@ public class DataSeeder implements CommandLineRunner {
         // 1. Seed Admin
         User admin = new User("System Administrator", "admin@food.com", "9999999999", commonPassword, Role.ADMIN);
         userRepository.save(admin);
+
+        // 1b. Seed Coordinator
+        User coordinator = new User("Sita Ram", "coord@food.com", "7777777777", commonPassword, Role.COORDINATOR);
+        userRepository.save(coordinator);
 
         // 2. Seed Food Providers
         List<FoodProvider> providers = new ArrayList<>();
@@ -214,8 +220,12 @@ public class DataSeeder implements CommandLineRunner {
         fl1.setQuantity(35.0);
         fl1.setUnit("MEALS");
         fl1.setAllergens("Gluten");
-        fl1.setPreparationTime(LocalDateTime.now().minusHours(1));
-        fl1.setExpiryTime(LocalDateTime.now().plusHours(3));
+        fl1.setPreparationTime(Instant.now().minus(Duration.ofHours(1)));
+        fl1.setExpiryTime(Instant.now().plus(Duration.ofHours(3)));
+        fl1.setSafeConsumptionHours(4);
+        fl1.setDistributionSession(DistributionSession.AFTERNOON);
+        fl1.setAvailableFrom(Instant.now().minus(Duration.ofHours(1)));
+        fl1.setAvailableUntil(Instant.now().plus(Duration.ofHours(1)));
         fl1.setImageUrl("https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=300");
         fl1.setPickupAddress(p4.getAddress());
         fl1.setPickupLatitude(p4.getLatitude());
@@ -231,8 +241,12 @@ public class DataSeeder implements CommandLineRunner {
         fl2.setQuantity(40.0);
         fl2.setUnit("MEALS");
         fl2.setAllergens("Dairy");
-        fl2.setPreparationTime(LocalDateTime.now().minusHours(2));
-        fl2.setExpiryTime(LocalDateTime.now().plusHours(1));
+        fl2.setPreparationTime(Instant.now().minus(Duration.ofHours(2)));
+        fl2.setExpiryTime(Instant.now().plus(Duration.ofHours(1)));
+        fl2.setSafeConsumptionHours(3);
+        fl2.setDistributionSession(DistributionSession.AFTERNOON);
+        fl2.setAvailableFrom(Instant.now().minus(Duration.ofHours(1)));
+        fl2.setAvailableUntil(Instant.now().plus(Duration.ofHours(1)));
         fl2.setImageUrl("https://images.unsplash.com/photo-1633945274405-b6c8069047b0?auto=format&fit=crop&q=80&w=300");
         fl2.setPickupAddress(p1.getAddress());
         fl2.setPickupLatitude(p1.getLatitude());
@@ -265,8 +279,12 @@ public class DataSeeder implements CommandLineRunner {
         fl3.setCategory("VEG");
         fl3.setQuantity(60.0);
         fl3.setUnit("MEALS");
-        fl3.setPreparationTime(LocalDateTime.now().minusHours(8));
-        fl3.setExpiryTime(LocalDateTime.now().minusHours(2)); // Expired now, but was completed earlier
+        fl3.setPreparationTime(Instant.now().minus(Duration.ofHours(8)));
+        fl3.setExpiryTime(Instant.now().minus(Duration.ofHours(2))); // Expired now, but was completed earlier
+        fl3.setSafeConsumptionHours(6);
+        fl3.setDistributionSession(DistributionSession.AFTERNOON);
+        fl3.setAvailableFrom(Instant.now().minus(Duration.ofHours(9)));
+        fl3.setAvailableUntil(Instant.now().minus(Duration.ofHours(7)));
         fl3.setImageUrl("");
         fl3.setPickupAddress(p2.getAddress());
         fl3.setPickupLatitude(p2.getLatitude());
@@ -305,8 +323,12 @@ public class DataSeeder implements CommandLineRunner {
         fl4.setCategory("EGG");
         fl4.setQuantity(15.0);
         fl4.setUnit("MEALS");
-        fl4.setPreparationTime(LocalDateTime.now().minusHours(6));
-        fl4.setExpiryTime(LocalDateTime.now().minusHours(1)); // Has already expired
+        fl4.setPreparationTime(Instant.now().minus(Duration.ofHours(6)));
+        fl4.setExpiryTime(Instant.now().minus(Duration.ofHours(1))); // Has already expired
+        fl4.setSafeConsumptionHours(5);
+        fl4.setDistributionSession(DistributionSession.AFTERNOON);
+        fl4.setAvailableFrom(Instant.now().minus(Duration.ofHours(7)));
+        fl4.setAvailableUntil(Instant.now().minus(Duration.ofHours(5)));
         fl4.setPickupAddress(p1.getAddress());
         fl4.setPickupLatitude(p1.getLatitude());
         fl4.setPickupLongitude(p1.getLongitude());

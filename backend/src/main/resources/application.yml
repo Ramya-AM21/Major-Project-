@@ -1,5 +1,5 @@
 server:
-  port: ${PORT:8081}
+  port: ${PORT:8082}
 
 spring:
   datasource:
@@ -25,6 +25,14 @@ spring:
     allow-bean-definition-overriding: true
 
 app:
+  timezone: ${APP_TIMEZONE:Asia/Kolkata}
+  sessions:
+    afternoon:
+      start: ${AFTERNOON_SESSION_START:13:00}
+      end: ${AFTERNOON_SESSION_END:15:00}
+    night:
+      start: ${NIGHT_SESSION_START:20:00}
+      end: ${NIGHT_SESSION_END:22:00}
   jwt:
     secret: ${JWT_SECRET:9263046773539828574921938563829102837561028374829384756283928475}
     expiration-ms: 86400000 # 24 hours
@@ -35,3 +43,5 @@ app:
     max-volunteer-to-shelter-distance-km: ${MAX_VOLUNTEER_TO_SHELTER_DISTANCE_KM:5.0}
     min-match-distance-meters: ${MIN_MATCH_DISTANCE_METERS:100.0}
     gps-accuracy-threshold-meters: ${GPS_ACCURACY_THRESHOLD_METERS:50.0}
+  delivery:
+    geofence-radius-meters: ${DELIVERY_GEOFENCE_RADIUS_METERS:100.0}

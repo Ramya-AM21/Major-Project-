@@ -31,6 +31,7 @@ public class DeliveryTaskService {
     private final NotificationService notificationService;
     private final DeliveryProofRepository deliveryProofRepository;
     private final com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler;
+    private final VolunteerRouteRepository volunteerRouteRepository;
 
     public DeliveryTaskService(DeliveryTaskRepository deliveryTaskRepository,
                                FoodListingRepository foodListingRepository,
@@ -44,7 +45,8 @@ public class DeliveryTaskService {
                                AuditLogService auditLogService,
                                NotificationService notificationService,
                                DeliveryProofRepository deliveryProofRepository,
-                               com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler) {
+                               com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler,
+                               VolunteerRouteRepository volunteerRouteRepository) {
         this.deliveryTaskRepository = deliveryTaskRepository;
         this.foodListingRepository = foodListingRepository;
         this.zoneRepository = zoneRepository;
@@ -58,6 +60,7 @@ public class DeliveryTaskService {
         this.notificationService = notificationService;
         this.deliveryProofRepository = deliveryProofRepository;
         this.webSocketHandler = webSocketHandler;
+        this.volunteerRouteRepository = volunteerRouteRepository;
     }
 
     public List<DeliveryTask> getAllTasks() {
@@ -142,25 +145,80 @@ public class DeliveryTaskService {
             }
         }
 
-        if (!"CREATED".equals(task.getStatus()) && !"MATCHED".equals(task.getStatus())) {
-            throw new IllegalArgumentException("Task is already accepted or in progress");
+        // Acquire Pessimistic Lock on FoodListing to guarantee concurrent safety
+        final UUID foodId = task.getFoodListing().getId();
+        FoodListing food = foodListingRepository.findByIdForUpdate(foodId)
+                .orElseThrow(() -> new ResourceNotFoundException("Food listing not found: " + foodId));
+
+        if (!"AVAILABLE".equals(food.getStatus())) {
+            throw new IllegalArgumentException("This delivery task has already been accepted by another volunteer.");
         }
 
-        // Database-level atomic check-and-set to prevent double assignment
+        // Recheck expiry and session timings
+        java.time.Instant now = java.time.Instant.now();
+        if (food.getEffectiveAvailableUntil() == null || now.isAfter(food.getEffectiveAvailableUntil())) {
+            throw new IllegalArgumentException("This food listing has expired or its session has closed.");
+        }
+
+        // Volunteer eligibility: must have valid location
+        Double volLat = volunteer.getLatitude();
+        Double volLng = volunteer.getLongitude();
+        if (volLat == null || volLng == null) {
+            List<VolunteerRoute> routes = volunteerRouteRepository.findByVolunteerId(volunteer.getId());
+            VolunteerRoute r = routes.stream()
+                    .filter(rt -> rt.getStatus() == null || "ACTIVE".equalsIgnoreCase(rt.getStatus()))
+                    .findFirst()
+                    .orElse(null);
+            if (r != null) {
+                volLat = r.getCurrentLatitude() != null ? r.getCurrentLatitude() : r.getStartLatitude();
+                volLng = r.getCurrentLongitude() != null ? r.getCurrentLongitude() : r.getStartLongitude();
+            }
+        }
+
+        if (volLat == null || volLng == null) {
+            throw new IllegalArgumentException("Your current GPS location is required to calculate travel ETA.");
+        }
+
+        // Destination eligibility: must have valid destination coordinates
+        if (food.getDestinationLatitude() == null || food.getDestinationLongitude() == null) {
+            throw new IllegalArgumentException("The target destination zone has invalid geolocations.");
+        }
+
+        // Calculate travel ETAs using OSRM duration (in minutes)
+        double volunteerToPickupDuration = matchingService.getOsrmRoadDuration(new double[][]{
+            {volLat, volLng},
+            {food.getPickupLatitude(), food.getPickupLongitude()}
+        });
+
+        double pickupToDestinationDuration = matchingService.getOsrmRoadDuration(new double[][]{
+            {food.getPickupLatitude(), food.getPickupLongitude()},
+            {food.getDestinationLatitude(), food.getDestinationLongitude()}
+        });
+
+        double verificationBuffer = 15.0; // 15 minutes buffer
+        double totalRequiredTimeMins = volunteerToPickupDuration + pickupToDestinationDuration + verificationBuffer;
+
+        double remainingAvailableTimeMins = java.time.Duration.between(now, food.getEffectiveAvailableUntil()).toMinutes();
+
+        if (remainingAvailableTimeMins < totalRequiredTimeMins) {
+            throw new IllegalArgumentException("This delivery cannot be accepted because there is insufficient time remaining for pickup, delivery, and verification.");
+        }
+
+        // Database-level conditional update using conditional update to double check
         int updatedRows = deliveryTaskRepository.assignVolunteerAtomic(taskId, volunteer);
         if (updatedRows == 0) {
-            throw new IllegalArgumentException("Delivery already accepted by another volunteer.");
+            throw new IllegalArgumentException("This delivery task has already been accepted by another volunteer.");
         }
 
         // Re-read task to get updated state
         task = getById(taskId);
 
-        FoodListing food = task.getFoodListing();
-        food.setStatus("MATCHED");
+        // Update food status to ACCEPTED (lifecycle update!)
+        food.setStatus("ACCEPTED");
         foodListingRepository.save(food);
 
         // Audit log
-        auditLogService.log(volunteer.getUser().getEmail(), "VOLUNTEER", "TASK_ACCEPTED", "DeliveryTask", taskId.toString(), "Task accepted");
+        auditLogService.log(volunteer.getUser().getEmail(), "VOLUNTEER", "TASK_ACCEPTED", "DeliveryTask", taskId.toString(), "Task accepted successfully with OSRM validation");
 
         // Broadcast WS state changes
         webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "ACCEPTED"));
@@ -536,7 +594,7 @@ public class DeliveryTaskService {
 
         int urgencyBonus = 0;
         if (food.getExpiryTime() != null) {
-            long minutesLeft = java.time.Duration.between(LocalDateTime.now(), food.getExpiryTime()).toMinutes();
+            long minutesLeft = java.time.Duration.between(java.time.Instant.now(), food.getExpiryTime()).toMinutes();
             if (minutesLeft <= 60 && minutesLeft > 0) {
                 urgencyBonus = 5;
             } else if (minutesLeft <= 120 && minutesLeft > 0) {

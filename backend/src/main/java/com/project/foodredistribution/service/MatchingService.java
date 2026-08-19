@@ -199,6 +199,41 @@ public class MatchingService {
         return fallbackDist;
     }
 
+    // Call external OSRM API for road duration (in minutes)
+    public double getOsrmRoadDuration(double[][] coordinates) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < coordinates.length; i++) {
+            if (i > 0) sb.append(";");
+            sb.append(String.format(java.util.Locale.US, "%f,%f", coordinates[i][1], coordinates[i][0])); // lon,lat
+        }
+        String url = "https://router.project-osrm.org/route/v1/driving/" + sb.toString() + "?overview=false";
+        try {
+            Map response = restTemplate.getForObject(url, Map.class);
+            if (response != null && response.containsKey("routes")) {
+                List routes = (List) response.get("routes");
+                if (routes != null && !routes.isEmpty()) {
+                    Map route = (Map) routes.get(0);
+                    if (route != null && route.containsKey("duration")) {
+                        double durationSecs = ((Number) route.get("duration")).doubleValue();
+                        return durationSecs / 60.0; // convert to minutes
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("OSRM routing duration API call failed: {}. Falling back to straight-line duration calculation.", e.getMessage());
+        }
+
+        // Fallback: estimate time using straight-line distance / 20 km/h (20 km/h is 1/3 km per minute)
+        double fallbackDist = 0.0;
+        for (int i = 0; i < coordinates.length - 1; i++) {
+            fallbackDist += calculateDistance(coordinates[i][0], coordinates[i][1], coordinates[i + 1][0], coordinates[i + 1][1]);
+        }
+        double fallbackDurationMins = fallbackDist * 3.0; // distance / (20/60)
+        log.info("OSRM Fallback - Calculated straight-line distance: {} km -> estimated duration: {} minutes", fallbackDist, fallbackDurationMins);
+        return fallbackDurationMins;
+    }
+
+
     public double calculateRouteDeviationRoad(VolunteerRoute route, FoodListing food, Zone zone) {
         double startLat = (route.getCurrentLatitude() != null) ? route.getCurrentLatitude() : route.getStartLatitude();
         double startLng = (route.getCurrentLongitude() != null) ? route.getCurrentLongitude() : route.getStartLongitude();
@@ -272,7 +307,7 @@ public class MatchingService {
         double reliabilityScore = volunteer.getReliabilityScore() * 100.0;
 
         // 5. Food Urgency (15%): time remaining until expiry
-        long minutesRemaining = Duration.between(LocalDateTime.now(), food.getExpiryTime()).toMinutes();
+        long minutesRemaining = Duration.between(java.time.Instant.now(), food.getExpiryTime()).toMinutes();
         double urgencyScore;
         if (minutesRemaining <= 0) {
             urgencyScore = 0.0;

@@ -18,6 +18,8 @@ export const CreateFoodListing: React.FC = () => {
 
   // Expiry / Safety States
   const [safeConsumptionHrs, setSafeConsumptionHrs] = useState<number>(3); // default 3 hours
+  const [distributionSession, setDistributionSession] = useState<'AFTERNOON' | 'NIGHT'>('AFTERNOON');
+  const [sessionConfig, setSessionConfig] = useState<any>(null);
   const [prepTime, setPrepTime] = useState(() => {
     // Current local time formatted for datetime-local input
     const now = new Date();
@@ -77,6 +79,16 @@ export const CreateFoodListing: React.FC = () => {
       }
     };
     fetchZones();
+
+    const fetchSessionConfig = async () => {
+      try {
+        const res = await axios.get('/api/v1/sessions/config');
+        setSessionConfig(res.data);
+      } catch (e) {
+        console.error("Could not fetch sessions configuration", e);
+      }
+    };
+    fetchSessionConfig();
   }, []);
  
   useEffect(() => {
@@ -134,8 +146,6 @@ export const CreateFoodListing: React.FC = () => {
     setLoading(true);
     try {
       const prepDate = new Date(prepTime);
-      // Expiry time is computed dynamically as: prep_time + safe_consumption_hours
-      const expiryDate = new Date(prepDate.getTime() + safeConsumptionHrs * 60 * 60 * 1000);
 
       const payload = {
         foodName,
@@ -144,14 +154,14 @@ export const CreateFoodListing: React.FC = () => {
         unit,
         allergens,
         preparationTime: prepDate.toISOString(),
-        expiryTime: expiryDate.toISOString(),
+        safeConsumptionHours: safeConsumptionHrs,
+        distributionSession: distributionSession,
         pickupAddress,
         pickupLatitude: latitude,
         pickupLongitude: longitude,
         destinationZone: {
           id: selectedZoneId
-        },
-        status: 'AVAILABLE'
+        }
       };
 
       await axios.post('/api/v1/food', payload);
@@ -279,11 +289,23 @@ export const CreateFoodListing: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 2: Expiry & Safe Windows */}
+          {/* Section 2: Distribution Session & Safety Timers */}
           <div className="space-y-4 pt-4 border-t border-natural-border">
-            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">2. Consumption Safety Timers</h3>
+            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">2. Distribution Session & Consumption Safety Timers</h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Distribution Session</label>
+                <select
+                  value={distributionSession}
+                  onChange={(e) => setDistributionSession(e.target.value as any)}
+                  className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                >
+                  <option value="AFTERNOON">Afternoon Distribution (1:00 PM - 3:00 PM)</option>
+                  <option value="NIGHT">Night Distribution (8:00 PM - 10:00 PM)</option>
+                </select>
+              </div>
+
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Kitchen Preparation Time</label>
                 <input
@@ -307,8 +329,29 @@ export const CreateFoodListing: React.FC = () => {
                   className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
                   placeholder="E.g. 3 hours"
                 />
-                <span className="text-[10px] text-natural-muted mt-1 block font-semibold">
-                  Expiries trigger auto-removal bounds to avoid safety breaches.
+              </div>
+            </div>
+
+            {/* Calculations Preview Panel */}
+            <div className="p-4 bg-brand-50/20 border border-brand-100 rounded-xl space-y-1.5 text-xs text-brand-850 font-semibold">
+              <div className="flex justify-between">
+                <span>Selected Session Window:</span>
+                <span className="font-bold">
+                  {distributionSession === 'AFTERNOON' 
+                    ? `${sessionConfig?.AFTERNOON?.start || '13:00'} - ${sessionConfig?.AFTERNOON?.end || '15:00'}`
+                    : `${sessionConfig?.NIGHT?.start || '20:00'} - ${sessionConfig?.NIGHT?.end || '22:00'}`}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Calculated Food Expiry Time:</span>
+                <span className="font-bold text-red-650">
+                  {new Date(new Date(prepTime).getTime() + safeConsumptionHrs * 60 * 60 * 1000).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-brand-100/50 pt-1.5 mt-1.5 text-[11px]">
+                <span>Effective Availability Bounds:</span>
+                <span className="font-mono bg-white px-2 py-0.5 rounded border border-brand-100">
+                  From: {distributionSession === 'AFTERNOON' ? '1:00 PM' : '8:00 PM'} | Until: MIN(Session End, Food Expiry)
                 </span>
               </div>
             </div>

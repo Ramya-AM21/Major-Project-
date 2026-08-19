@@ -5,7 +5,7 @@ import { MapView } from '../components/MapView';
 import { 
   Navigation, MapPin, Compass, AlertCircle, RefreshCw, CheckCircle, Clock, 
   Award, Shield, Trash2, ArrowRight, Info, ChevronDown, ChevronUp, Search, Loader2,
-  Star, Coins
+  Star, Coins, Check
 } from 'lucide-react';
 import axios from 'axios';
 import foodRescueImg from '../assets/food_rescue.png';

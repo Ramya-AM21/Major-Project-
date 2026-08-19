@@ -75,10 +75,12 @@ interface MatchRecommendation {
     address: string;
     latitude: number;
     longitude: number;
+    source?: string;
   };
   routeId: string | null;
   deviation: number;
   matchingScore: number;
+  distanceToDestination?: number | null;
 }
 
 export const VolunteerDashboard: React.FC = () => {
@@ -91,8 +93,20 @@ export const VolunteerDashboard: React.FC = () => {
   // Recommendations, stats, and history
   const [recommendations, setRecommendations] = useState<MatchRecommendation[]>([]);
   const [historyTasks, setHistoryTasks] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'MATCHES' | 'IMPACT' | 'HISTORY'>('MATCHES');
+  const [activeTab, setActiveTab] = useState<'MATCHES' | 'IMPACT' | 'HISTORY' | 'SHELTERS'>('MATCHES');
+
+  // Shelter deliveries states
+  const [availableShelterDeliveries, setAvailableShelterDeliveries] = useState<any[]>([]);
+  const [activeShelterTask, setActiveShelterTask] = useState<any | null>(null);
+  const [shelterOtp, setShelterOtp] = useState('');
+  const [actualQuantity, setActualQuantity] = useState<number>(0);
+  const [quantityReason, setQuantityReason] = useState('');
+  const [repName, setRepName] = useState('');
+  const [repPhone, setRepPhone] = useState('');
+  const [signature, setSignature] = useState('');
+  const [completingShelterTask, setCompletingShelterTask] = useState(false);
   const [showCompletedReward, setShowCompletedReward] = useState<any | null>(null);
+  const [sessionConfig, setSessionConfig] = useState<any>(null);
 
   const [vStats, setVStats] = useState({
     rating: 4.9,
@@ -119,6 +133,71 @@ export const VolunteerDashboard: React.FC = () => {
   const [gpsAccuracyWarning, setGpsAccuracyWarning] = useState<string | null>(null);
   const lastUploadedCoords = useRef<{ lat: number; lng: number; time: number } | null>(null);
   const [tGpsExpanded, setTGpsExpanded] = useState<boolean>(false);
+
+  const getActiveSessionDetails = () => {
+    if (!sessionConfig) return null;
+    const now = new Date();
+    // Convert to target timezone (e.g. Asia/Kolkata)
+    const options = { timeZone: sessionConfig.timezone, hour12: false, hour: '2-digit', minute: '2-digit' } as const;
+    const istString = now.toLocaleTimeString('en-US', options);
+    const [hStr, mStr] = istString.split(':');
+    const hours = parseInt(hStr);
+    const minutes = parseInt(mStr);
+    const currentMins = hours * 60 + minutes;
+
+    // Parse afternoon start & end
+    const [aftStartH, aftStartM] = (sessionConfig.AFTERNOON.start).split(':').map(Number);
+    const [aftEndH, aftEndM] = (sessionConfig.AFTERNOON.end).split(':').map(Number);
+    const aftStartMins = aftStartH * 60 + aftStartM;
+    const aftEndMins = aftEndH * 60 + aftEndM;
+
+    // Parse night start & end
+    const [nightStartH, nightStartM] = (sessionConfig.NIGHT.start).split(':').map(Number);
+    const [nightEndH, nightEndM] = (sessionConfig.NIGHT.end).split(':').map(Number);
+    const nightStartMins = nightStartH * 60 + nightStartM;
+    const nightEndMins = nightEndH * 60 + nightEndM;
+
+    if (currentMins >= aftStartMins && currentMins <= aftEndMins) {
+      return {
+        active: true,
+        name: 'Afternoon Distribution Session',
+        remaining: aftEndMins - currentMins,
+        window: `${sessionConfig.AFTERNOON.start} - ${sessionConfig.AFTERNOON.end}`
+      };
+    } else if (currentMins >= nightStartMins && currentMins <= nightEndMins) {
+      return {
+        active: true,
+        name: 'Night Distribution Session',
+        remaining: nightEndMins - currentMins,
+        window: `${sessionConfig.NIGHT.start} - ${sessionConfig.NIGHT.end}`
+      };
+    }
+
+    // Calculate next session
+    let nextSessionName = '';
+    let nextSessionWindow = '';
+    let minutesToNext = 0;
+    if (currentMins < aftStartMins) {
+      nextSessionName = 'Afternoon Distribution';
+      nextSessionWindow = `${sessionConfig.AFTERNOON.start} - ${sessionConfig.AFTERNOON.end}`;
+      minutesToNext = aftStartMins - currentMins;
+    } else if (currentMins < nightStartMins) {
+      nextSessionName = 'Night Distribution';
+      nextSessionWindow = `${sessionConfig.NIGHT.start} - ${sessionConfig.NIGHT.end}`;
+      minutesToNext = nightStartMins - currentMins;
+    } else {
+      nextSessionName = 'Afternoon Distribution (Tomorrow)';
+      nextSessionWindow = `${sessionConfig.AFTERNOON.start} - ${sessionConfig.AFTERNOON.end}`;
+      minutesToNext = (24 * 60 - currentMins) + aftStartMins;
+    }
+
+    return {
+      active: false,
+      nextName: nextSessionName,
+      nextWindow: nextSessionWindow,
+      minutesToNext
+    };
+  };
 
   // OSRM route geometry states
   const [routeGeometryPoints, setRouteGeometryPoints] = useState<[number, number][]>([]);
@@ -375,6 +454,22 @@ export const VolunteerDashboard: React.FC = () => {
       } else {
         setVerificationData(null);
       }
+
+      // Sync shelter deliveries
+      try {
+        const myDeliveriesRes = await axios.get('/api/v1/volunteer/deliveries');
+        const activeST = myDeliveriesRes.data.find(
+          (d: any) => d.status !== 'DELIVERED' && d.status !== 'FAILED' && d.status !== 'CANCELLED'
+        );
+        setActiveShelterTask(activeST || null);
+
+        const lat = currentLat || 12.9716;
+        const lng = currentLng || 77.5946;
+        const availRes = await axios.get(`/api/v1/volunteer/available-deliveries?volunteerLat=${lat}&volunteerLng=${lng}`);
+        setAvailableShelterDeliveries(availRes.data || []);
+      } catch (shelterErr) {
+        console.error("Failed to load shelter deliveries", shelterErr);
+      }
     } catch (e: any) {
       console.error(e);
       setErrorStatus("Failed to load volunteer commute console datasets.");
@@ -383,9 +478,36 @@ export const VolunteerDashboard: React.FC = () => {
     }
   };
 
+  const fetchShelterDeliveries = async () => {
+    try {
+      const myDeliveriesRes = await axios.get('/api/v1/volunteer/deliveries');
+      const activeST = myDeliveriesRes.data.find(
+        (d: any) => d.status !== 'DELIVERED' && d.status !== 'FAILED' && d.status !== 'CANCELLED'
+      );
+      setActiveShelterTask(activeST || null);
+
+      const lat = currentLat || 12.9716;
+      const lng = currentLng || 77.5946;
+      const availRes = await axios.get(`/api/v1/volunteer/available-deliveries?volunteerLat=${lat}&volunteerLng=${lng}`);
+      setAvailableShelterDeliveries(availRes.data || []);
+    } catch (e) {
+      console.error("Failed to fetch shelter deliveries", e);
+    }
+  };
+
+  useEffect(() => {
+    if (currentLat !== null && currentLng !== null) {
+      fetchShelterDeliveries();
+    }
+  }, [currentLat, currentLng]);
+
   useEffect(() => {
     handleRequestLocation();
     fetchVolunteerData();
+
+    axios.get('/api/v1/sessions/config')
+      .then(res => setSessionConfig(res.data))
+      .catch(err => console.error("Could not load sessions configuration", err));
 
     const timer = setInterval(() => setNowTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -579,6 +701,122 @@ export const VolunteerDashboard: React.FC = () => {
       fetchVolunteerData();
     } catch (err: any) {
       setErrorStatus(err.response?.data?.message || 'Could not update destination arrival.');
+    }
+  };
+
+  // --- Shelter Deliveries Actions ---
+
+  const handleAcceptShelterDelivery = async (reqId: string) => {
+    try {
+      await axios.post(`/api/v1/volunteer/deliveries/${reqId}/accept`);
+      alert("Delivery accepted! Navigation active.");
+      fetchVolunteerData();
+      fetchShelterDeliveries();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to accept delivery.");
+    }
+  };
+
+  const handleStartShelterDelivery = async (id: string) => {
+    try {
+      await axios.post(`/api/v1/volunteer/deliveries/${id}/start`, {
+        currentLat,
+        currentLng
+      });
+      alert("Delivery navigation started!");
+      fetchShelterDeliveries();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to start delivery.");
+    }
+  };
+
+  const handleArriveShelterDelivery = async (id: string) => {
+    try {
+      await axios.post(`/api/v1/volunteer/deliveries/${id}/arrive`, {
+        currentLat,
+        currentLng
+      });
+      alert("Arrived successfully! Please request handover OTP from the coordinator.");
+      fetchShelterDeliveries();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to arrive at location.");
+    }
+  };
+
+  const handleVerifyShelterOtp = async (id: string) => {
+    if (!shelterOtp.trim()) {
+      alert("Please enter the 6-digit OTP.");
+      return;
+    }
+    try {
+      await axios.post(`/api/v1/volunteer/deliveries/${id}/verify-otp`, {
+        otp: shelterOtp
+      });
+      alert("OTP Handover verified! Please take a photo proof to complete delivery.");
+      setShelterOtp('');
+      fetchShelterDeliveries();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Invalid OTP code.");
+    }
+  };
+
+  const handleUploadShelterProof = async (id: string, file: File) => {
+    if (!currentLat || !currentLng) {
+      alert("GPS coordinates are required to upload photo proof.");
+      return;
+    }
+    setSubmittingProof(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("latitude", currentLat.toString());
+      formData.append("longitude", currentLng.toString());
+
+      await axios.post(`/api/v1/volunteer/deliveries/${id}/proof`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      alert("Photo proof successfully uploaded!");
+      fetchShelterDeliveries();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to upload photo proof.");
+    } finally {
+      setSubmittingProof(false);
+    }
+  };
+
+  const handleCompleteShelterDelivery = async (id: string) => {
+    if (!repName.trim()) {
+      alert("Please enter Representative Name.");
+      return;
+    }
+    if (actualQuantity < activeShelterTask.foodRequirement.quantityRequired && !quantityReason.trim()) {
+      alert("A short explanation is required when the delivered quantity is lower than required.");
+      return;
+    }
+    setCompletingShelterTask(true);
+    try {
+      const payload = {
+        actualQuantity,
+        reason: quantityReason,
+        representativeName: repName,
+        representativePhone: repPhone,
+        digitalSignature: signature
+      };
+      await axios.post(`/api/v1/volunteer/deliveries/${id}/complete`, payload);
+      alert("Handover completed! 15 tokens awarded.");
+      
+      // Reset active variables
+      setRepName('');
+      setRepPhone('');
+      setQuantityReason('');
+      setSignature('');
+      
+      fetchVolunteerData();
+      fetchShelterDeliveries();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Failed to complete delivery.");
+    } finally {
+      setCompletingShelterTask(false);
     }
   };
 
@@ -1290,6 +1528,254 @@ export const VolunteerDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+      ) : activeShelterTask ? (
+        /* ================= ACTIVE SHELTER STATE ================= */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch text-left">
+          
+          {/* Active Navigation & Actions Column */}
+          <div className="lg:col-span-6 bg-white border border-brand-200 p-6 rounded-2xl shadow-xs relative overflow-hidden flex flex-col justify-between">
+            <div className="absolute top-0 right-0 left-0 h-1.5 bg-brand-650"></div>
+            
+            <div>
+              <div className="flex justify-between items-start mb-4 bg-white">
+                <div>
+                  <span className="text-[9px] bg-brand-50 border border-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                    Shelter Handover Active
+                  </span>
+                  <h3 className="text-base font-bold text-natural-text mt-1">{activeShelterTask.foodRequirement.shelter.name}</h3>
+                  <p className="text-xs text-gray-500">{activeShelterTask.foodRequirement.shelter.address}</p>
+                </div>
+                <span className="text-xs font-mono font-bold text-gray-655 bg-gray-50 px-2 py-1 border border-gray-200 rounded uppercase">
+                  Status: {activeShelterTask.status.replace(/_/g, ' ')}
+                </span>
+              </div>
+
+              {/* Requirements summary */}
+              <div className="bg-[#FAF9F5]/60 p-4 rounded-xl border border-gray-150 mb-5 text-xs space-y-2">
+                <p><strong>Food Target:</strong> {activeShelterTask.foodRequirement.quantityRequired} {activeShelterTask.foodRequirement.unit} of {activeShelterTask.foodRequirement.foodType}</p>
+                <p><strong>People to serve:</strong> {activeShelterTask.foodRequirement.peopleToServe} people</p>
+                <p><strong>Coordinator:</strong> {activeShelterTask.foodRequirement.coordinator?.name} ({activeShelterTask.foodRequirement.coordinator?.email})</p>
+                {activeShelterTask.foodRequirement.instructions && (
+                  <p className="text-brand-800 bg-brand-50/50 p-2 rounded border border-brand-100 mt-2">
+                    <strong>Instructions:</strong> "{activeShelterTask.foodRequirement.instructions}"
+                  </p>
+                )}
+              </div>
+
+              {/* Handover Stages */}
+              <div className="space-y-4">
+                
+                {/* Stage 1: Navigate */}
+                {activeShelterTask.status === 'ASSIGNED' && (
+                  <div className="p-4 border border-brand-200 bg-brand-50/20 rounded-xl space-y-3">
+                    <p className="text-xs font-semibold text-gray-700">Please start navigation to the shelter location when you are ready to depart.</p>
+                    <button
+                      onClick={() => handleStartShelterDelivery(activeShelterTask.id)}
+                      className="w-full bg-brand-650 hover:bg-brand-700 text-white font-semibold py-2 rounded-lg text-xs flex items-center justify-center gap-1 shadow-sm transition"
+                    >
+                      <Navigation className="w-4 h-4" />
+                      Start Navigation Route
+                    </button>
+                  </div>
+                )}
+
+                {/* Stage 2: Arrive */}
+                {activeShelterTask.status === 'OUT_FOR_DELIVERY' && (
+                  <div className="p-4 border border-brand-200 bg-brand-50/20 rounded-xl space-y-3">
+                    <p className="text-xs font-semibold text-gray-700">Drive to the shelter location. Once you are within 100 meters, click "Confirm Arrival".</p>
+                    <button
+                      onClick={() => handleArriveShelterDelivery(activeShelterTask.id)}
+                      className="w-full bg-brand-650 hover:bg-brand-700 text-white font-semibold py-2 rounded-lg text-xs flex items-center justify-center gap-1 shadow-sm transition"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      Confirm Arrival (Geofence Check)
+                    </button>
+                  </div>
+                )}
+
+                {/* Stage 3: OTP verification */}
+                {activeShelterTask.status === 'ARRIVED' && (
+                  <div className="p-4 border border-amber-205 bg-amber-50/30 rounded-xl space-y-3">
+                    <p className="text-xs font-semibold text-gray-700">Request the 6-digit handover OTP from the shelter representative/coordinator and enter below:</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Enter 6-digit OTP"
+                        value={shelterOtp}
+                        onChange={e => setShelterOtp(e.target.value)}
+                        className="border border-gray-300 px-3 py-2 rounded-lg text-xs focus:ring-1 focus:ring-brand-600 focus:outline-none w-full bg-white font-mono text-center tracking-widest text-lg"
+                      />
+                      <button
+                        onClick={() => handleVerifyShelterOtp(activeShelterTask.id)}
+                        className="bg-brand-650 hover:bg-brand-700 text-white font-semibold px-4 rounded-lg text-xs transition whitespace-nowrap"
+                      >
+                        Verify OTP
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Stage 4: Photo Proof & Complete */}
+                {(activeShelterTask.status === 'VERIFICATION_PENDING' || activeShelterTask.status === 'ARRIVED') && (
+                  <div className="space-y-4">
+                    {/* Photo Upload */}
+                    <div className="p-4 border border-gray-200 rounded-xl space-y-3 bg-white">
+                      <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Handover Evidence Photo *</span>
+                      {activeShelterTask.photoUrl ? (
+                        <div className="flex items-center gap-3 bg-emerald-55/30 border border-emerald-200 p-2.5 rounded-lg">
+                          <Check className="w-4 h-4 text-emerald-700" />
+                          <span className="text-xs text-emerald-800 font-semibold">Photo Proof Uploaded!</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <label className="flex items-center gap-1.5 cursor-pointer border border-gray-300 px-4 py-2 hover:bg-gray-50 rounded-lg transition text-xs font-semibold text-gray-700 bg-white">
+                            <Camera className="w-4 h-4" />
+                            Capture/Upload Photo
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              capture="environment"
+                              className="hidden" 
+                              onChange={e => e.target.files && handleUploadShelterProof(activeShelterTask.id, e.target.files[0])}
+                            />
+                          </label>
+                          <span className="text-xs text-gray-550 font-semibold">Take real-time dropoff photo</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Receipt Handover details Form */}
+                    {activeShelterTask.photoUrl && (
+                      <div className="p-4 border border-gray-250 rounded-xl bg-white space-y-4">
+                        <span className="block text-xs font-bold text-gray-500 uppercase tracking-wider">Receipt Confirmation Details</span>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] uppercase font-bold text-gray-450 mb-0.5">Delivered Qty *</label>
+                            <input
+                              type="number"
+                              value={actualQuantity}
+                              onChange={e => setActualQuantity(parseFloat(e.target.value))}
+                              className="border border-gray-300 px-3 py-1.5 rounded-lg text-xs focus:ring-1 focus:ring-brand-600 focus:outline-none w-full bg-white font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase font-bold text-gray-450 mb-0.5">Shortage Reason</label>
+                            <input
+                              type="text"
+                              placeholder="Required if quantity is lower"
+                              value={quantityReason}
+                              onChange={e => setQuantityReason(e.target.value)}
+                              className="border border-gray-300 px-3 py-1.5 rounded-lg text-xs focus:ring-1 focus:ring-brand-600 focus:outline-none w-full bg-white"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] uppercase font-bold text-gray-450 mb-0.5">Rep Name *</label>
+                            <input
+                              type="text"
+                              value={repName}
+                              onChange={e => setRepName(e.target.value)}
+                              className="border border-gray-300 px-3 py-1.5 rounded-lg text-xs focus:ring-1 focus:ring-brand-600 focus:outline-none w-full bg-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase font-bold text-gray-450 mb-0.5">Rep Phone</label>
+                            <input
+                              type="text"
+                              value={repPhone}
+                              onChange={e => setRepPhone(e.target.value)}
+                              className="border border-gray-300 px-3 py-1.5 rounded-lg text-xs focus:ring-1 focus:ring-brand-600 focus:outline-none w-full bg-white"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-gray-450 mb-0.5">Digital Signature Initials *</label>
+                          <input
+                            type="text"
+                            placeholder="Type initials to sign handover"
+                            value={signature}
+                            onChange={e => setSignature(e.target.value)}
+                            className="border border-gray-300 px-3 py-1.5 rounded-lg text-xs focus:ring-1 focus:ring-brand-600 focus:outline-none w-full bg-white font-mono"
+                          />
+                        </div>
+
+                        <button
+                          onClick={() => handleCompleteShelterDelivery(activeShelterTask.id)}
+                          disabled={completingShelterTask}
+                          className="w-full bg-emerald-650 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg text-xs flex items-center justify-center gap-1 shadow-sm transition"
+                        >
+                          {completingShelterTask ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Completing Handover...
+                            </>
+                          ) : 'Submit Handover Confirmation'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Cancel task action */}
+            <div className="pt-4 border-t border-red-50 mt-4">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm("Are you sure you want to release this shelter delivery task? It will return to the available queue.")) {
+                    try {
+                      setActiveShelterTask(null);
+                    } catch {
+                      alert("Failed to release task.");
+                    }
+                  }
+                }}
+                className="w-full py-2 bg-red-55/10 hover:bg-red-50 text-red-650 border border-red-100 font-bold text-[9px] rounded-lg transition-colors uppercase tracking-widest text-center animate-none"
+              >
+                <X className="w-3.5 h-3.5 inline mr-1 text-red-650 align-text-bottom" /> Release Active Shelter Task
+              </button>
+            </div>
+
+          </div>
+
+          {/* Map & Target Coordinates Column */}
+          <div className="lg:col-span-6 bg-white border border-natural-border rounded-2xl p-4 shadow-xs flex flex-col min-h-[460px]">
+            <div className="flex-1 relative rounded-xl overflow-hidden border border-natural-border min-h-[350px]">
+              <MapView 
+                center={[activeShelterTask.foodRequirement.shelter.latitude, activeShelterTask.foodRequirement.shelter.longitude]}
+                zoom={14}
+                interactive={false}
+                markers={[
+                  {
+                    id: 'shelter-dest',
+                    latitude: activeShelterTask.foodRequirement.shelter.latitude,
+                    longitude: activeShelterTask.foodRequirement.shelter.longitude,
+                    title: activeShelterTask.foodRequirement.shelter.name,
+                    role: 'ZONE'
+                  },
+                  ...(currentLat && currentLng ? [{
+                    id: 'volunteer-current',
+                    latitude: currentLat,
+                    longitude: currentLng,
+                    title: 'Your Current Position',
+                    role: 'CURRENT' as const
+                  }] : [])
+                ]}
+                polylinePoints={
+                  currentLat && currentLng 
+                    ? [[currentLat, currentLng], [activeShelterTask.foodRequirement.shelter.latitude, activeShelterTask.foodRequirement.shelter.longitude]]
+                    : []
+                }
+              />
+            </div>
+          </div>
+
+        </div>
       ) : (
         /* ================= IDLE STATE ================= */
         <div className="space-y-6">
@@ -1409,6 +1895,14 @@ export const VolunteerDashboard: React.FC = () => {
                 >
                   Rescues History
                 </button>
+                <button
+                  onClick={() => setActiveTab('SHELTERS')}
+                  className={`pb-2.5 px-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
+                    activeTab === 'SHELTERS' ? 'border-brand-600 text-brand-700' : 'border-transparent text-natural-muted hover:text-natural-text'
+                  }`}
+                >
+                  Shelter Deliveries ({availableShelterDeliveries.length})
+                </button>
               </div>
 
               {/* Tab Contents */}
@@ -1417,144 +1911,179 @@ export const VolunteerDashboard: React.FC = () => {
                 {/* 1. Matches list */}
                 {activeTab === 'MATCHES' && (
                   <div>
-                    {recommendations.length === 0 ? (
-                      <div className="p-12 text-center text-natural-muted space-y-4 flex flex-col items-center justify-center text-left">
-                        <div className="w-20 h-20 opacity-80 shrink-0 mx-auto">
-                          <img src={foodRescueImg} alt="No Food Matches" className="w-full h-full object-contain" />
-                        </div>
-                        <h4 className="text-sm font-display font-black text-natural-text text-center uppercase tracking-tight">Find Food Along Your Route</h4>
-                        <p className="text-xs font-semibold text-natural-muted text-center max-w-sm">No verified food-need locations are currently available along your route.</p>
-                        <div className="border-t border-natural-border pt-4 w-full text-center space-y-3">
-                          <p className="text-xs font-bold text-natural-text">Know a location where people need food?</p>
-                          <button
-                            onClick={() => { resetReportForm(); setIsReportModalOpen(true); }}
-                            className="btn-primary py-2 px-4 text-xs tracking-wider font-mono uppercase inline-flex items-center gap-1.5 mx-auto"
-                          >
-                            Report Community Need
-                          </button>
-                        </div>
-                        <div className="text-center pt-2 w-full">
-                          <Link to="/volunteer/routes" className="text-[10px] font-bold text-brand-650 hover:underline uppercase">
-                            Configure Commute Routes
-                          </Link>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-natural-border">
-                        {recommendations.map((rec) => {
-                          const pickupDist = currentLat !== null && currentLng !== null
-                            ? calculateDistance(currentLat, currentLng, rec.foodListing.pickupLatitude, rec.foodListing.pickupLongitude)
-                            : 0.0;
-                          const expectedCoins = getExpectedRewardForTask(rec);
-                          const isVeg = rec.foodListing.category === 'VEG';
-                          const isCardSelected = selectedRecId === rec.foodListing.id;
-                          
-                          let matchQuality = "Excellent match";
-                          if (rec.matchingScore < 70) {
-                            matchQuality = "Fair match";
-                          } else if (rec.matchingScore < 85) {
-                            matchQuality = "Good match";
-                          }
-
-                          return (
-                            <div
-                              key={rec.foodListing.id}
-                              onClick={() => setSelectedRecId(rec.foodListing.id)}
-                              className={`p-4 hover:bg-[#FAF9F5]/80 cursor-pointer transition-all flex flex-col gap-3.5 border-b border-natural-border last:border-b-0 ${
-                                isCardSelected ? 'bg-brand-50/10 border-l-4 border-l-brand-600 pl-3' : ''
-                              }`}
-                            >
-                              <div className="flex gap-4">
-                                <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 border border-natural-border bg-[#FAF9F5] relative shadow-xs">
-                                  {rec.foodListing.imageUrl ? (
-                                    <img src={rec.foodListing.imageUrl} alt={rec.foodListing.foodName} className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-brand-50 text-brand-650"><Utensils className="w-5 h-5" /></div>
-                                  )}
-                                  <span className={`absolute top-1 left-1 text-[7px] font-black px-1 py-0.5 rounded tracking-wide border shadow-xs ${
-                                    isVeg ? 'bg-emerald-55/10 text-emerald-800 border-emerald-250' : 'bg-rose-50 text-rose-700 border-rose-200'
-                                  }`}>
-                                    {rec.foodListing.category}
-                                  </span>
-                                </div>
-
-                                <div className="flex-1 min-w-0 text-left space-y-1 text-xs">
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    <span className="text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-black uppercase font-mono flex items-center gap-0.5">
-                                      <Star className="w-2.5 h-2.5 fill-brand-650 text-brand-650" /> {rec.matchingScore}% {matchQuality}
-                                    </span>
-                                    <span className="text-[8px] bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5 rounded font-bold font-mono">
-                                      Detour: {rec.deviation.toFixed(1)} km
-                                    </span>
-                                    <span className="text-[8px] bg-brand-100 text-brand-850 px-1.5 py-0.5 rounded font-bold font-mono">
-                                      {pickupDist.toFixed(1)} km away
-                                    </span>
-                                  </div>
-
-                                  <div>
-                                    <h4 className="font-display font-black text-xs text-natural-text truncate uppercase leading-tight mt-0.5">{rec.foodListing.foodName}</h4>
-                                    <p className="text-[10px] text-natural-muted font-bold mt-0.5">{rec.foodListing.provider?.businessName}</p>
-                                  </div>
-
-                                  <div className="grid grid-cols-2 gap-2 bg-[#FAF9F5] p-2 rounded-lg border border-natural-border text-[9px] font-semibold font-mono">
-                                    <div>
-                                      <span className="block text-[7px] uppercase font-bold tracking-wider text-natural-muted font-sans">Kitchen prep</span>
-                                      <span className="text-natural-text font-bold block">{formatTime(rec.foodListing.preparationTime)}</span>
-                                    </div>
-                                    <div>
-                                      <span className="block text-[7px] uppercase font-bold tracking-wider text-natural-muted font-sans">Safety window</span>
-                                      <span className="text-brand-600 font-bold block">{formatTime(rec.foodListing.expiryTime)}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="pt-2 border-t border-natural-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs bg-white">
-                                <div className="text-[10px] space-y-0.5 text-natural-muted font-medium flex-1 min-w-0">
-                                  <div className="truncate"><span className="font-bold text-natural-text uppercase text-[8px] tracking-wider mr-1">Pickup:</span> {rec.foodListing.pickupAddress}</div>
-                                  <div className="truncate">
-                                    <span className="font-bold text-natural-text uppercase text-[8px] tracking-wider mr-1">Destination:</span> 
-                                    {rec.zone.name}
-                                    <span className={`ml-2 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                                      rec.zone.source === 'COMMUNITY_REPORTED'
-                                        ? 'bg-amber-50 text-amber-850 border border-amber-250' 
-                                        : 'bg-brand-50 text-brand-700 border border-brand-100'
-                                    }`}>
-                                      {rec.zone.source === 'COMMUNITY_REPORTED' ? 'Verified community report' : 'Verified destination'}
-                                    </span>
-                                  </div>
-                                  <div className="text-[9px] font-mono font-semibold text-natural-muted mt-0.5">
-                                    {rec.distanceToDestination ? rec.distanceToDestination.toFixed(1) : '2.1'} km ahead • {rec.deviation.toFixed(1)} km route deviation
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center justify-between gap-3 shrink-0 self-end sm:self-auto">
-                                  <div className="text-right">
-                                    <span className="text-[8px] uppercase font-bold text-brand-700 tracking-wider block font-mono font-black">Est Payout</span>
-                                    <strong className="text-xs font-mono font-black text-brand-600 flex items-center gap-1">
-                                      <Coins className="w-3.5 h-3.5" /> {expectedCoins} coins
-                                    </strong>
-                                  </div>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleAcceptTask(rec);
-                                    }}
-                                    className="btn-primary py-2 px-3 text-[10px]"
-                                  >
-                                    Accept Task
-                                  </button>
-                                </div>
-                              </div>
+                    {/* Active Session Check */}
+                    {(() => {
+                      const session = getActiveSessionDetails();
+                      if (!session) return null;
+                      if (!session.active) {
+                        return (
+                          <div className="p-8 text-center text-natural-muted space-y-4 flex flex-col items-center justify-center">
+                            <div className="w-12 h-12 bg-amber-50 rounded-full border border-amber-100 flex items-center justify-center text-amber-600 animate-pulse">
+                              <Clock className="w-6 h-6" />
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
+                            <h4 className="text-sm font-display font-black text-natural-text uppercase tracking-tight">No food distribution session is currently active</h4>
+                            <p className="text-xs font-semibold text-natural-muted">
+                              Next scheduled window: <strong className="text-brand-650">{session.nextName} ({session.nextWindow})</strong>
+                            </p>
+                            <div className="border-t border-natural-border pt-4 w-full text-center">
+                              <button
+                                onClick={() => { resetReportForm(); setIsReportModalOpen(true); }}
+                                className="btn-primary py-2 px-4 text-xs tracking-wider font-mono uppercase inline-flex items-center gap-1.5 mx-auto"
+                              >
+                                Report Community Need
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      if (recommendations.length === 0) {
+                        return (
+                          <div className="p-12 text-center text-natural-muted space-y-4 flex flex-col items-center justify-center text-left">
+                            <div className="w-20 h-20 opacity-80 shrink-0 mx-auto">
+                              <img src={foodRescueImg} alt="No Food Matches" className="w-full h-full object-contain" />
+                            </div>
+                            <h4 className="text-sm font-display font-black text-natural-text text-center uppercase tracking-tight">Find Food Along Your Route</h4>
+                            <p className="text-xs font-semibold text-natural-muted text-center max-w-sm">No verified food-need locations are currently available along your route.</p>
+                            <div className="border-t border-natural-border pt-4 w-full text-center space-y-3">
+                              <p className="text-xs font-bold text-natural-text">Know a location where people need food?</p>
+                              <button
+                                onClick={() => { resetReportForm(); setIsReportModalOpen(true); }}
+                                className="btn-primary py-2 px-4 text-xs tracking-wider font-mono uppercase inline-flex items-center gap-1.5 mx-auto"
+                              >
+                                Report Community Need
+                              </button>
+                            </div>
+                            <div className="text-center pt-2 w-full">
+                              <Link to="/volunteer/routes" className="text-[10px] font-bold text-brand-650 hover:underline uppercase">
+                                Configure Commute Routes
+                              </Link>
+                            </div>
+                          </div>
+                        );
+                      }
 
-                {/* 2. Sustainability Impact View */}
+                      return (
+                        <div>
+                          <div className="p-3.5 bg-brand-50 border-b border-brand-100 text-left flex justify-between items-center text-[10px] text-brand-850 font-bold uppercase tracking-wider">
+                            <span>Active Window: {session.window}</span>
+                            <span>Remaining: {session.remaining} mins</span>
+                          </div>
+                          <div className="divide-y divide-natural-border">
+                            {recommendations.map((rec) => {
+                              const pickupDist = currentLat !== null && currentLng !== null
+                                ? calculateDistance(currentLat, currentLng, rec.foodListing.pickupLatitude, rec.foodListing.pickupLongitude)
+                                : 0.0;
+                              const expectedCoins = getExpectedRewardForTask(rec);
+                              const isVeg = rec.foodListing.category === 'VEG';
+                              const isCardSelected = selectedRecId === rec.foodListing.id;
+                              
+                              let matchQuality = "Excellent match";
+                              if (rec.matchingScore < 70) {
+                                matchQuality = "Fair match";
+                              } else if (rec.matchingScore < 85) {
+                                matchQuality = "Good match";
+                              }
+
+                              return (
+                                <div
+                                  key={rec.foodListing.id}
+                                  onClick={() => setSelectedRecId(rec.foodListing.id)}
+                                  className={`p-4 hover:bg-[#FAF9F5]/80 cursor-pointer transition-all flex flex-col gap-3.5 border-b border-natural-border last:border-b-0 ${
+                                    isCardSelected ? 'bg-brand-50/10 border-l-4 border-l-brand-600 pl-3' : ''
+                                  }`}
+                                >
+                                  <div className="flex gap-4">
+                                    <div className="w-16 h-16 rounded-xl overflow-hidden shrink-0 border border-natural-border bg-[#FAF9F5] relative shadow-xs">
+                                      {rec.foodListing.imageUrl ? (
+                                        <img src={rec.foodListing.imageUrl} alt={rec.foodListing.foodName} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-brand-50 text-brand-650"><Utensils className="w-5 h-5" /></div>
+                                      )}
+                                      <span className={`absolute top-1 left-1 text-[7px] font-black px-1 py-0.5 rounded tracking-wide border shadow-xs ${
+                                        isVeg ? 'bg-emerald-55/10 text-emerald-800 border-emerald-250' : 'bg-rose-50 text-rose-700 border-rose-200'
+                                      }`}>
+                                        {rec.foodListing.category}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex-1 min-w-0 text-left space-y-1 text-xs">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-black uppercase font-mono flex items-center gap-0.5">
+                                          <Star className="w-2.5 h-2.5 fill-brand-650 text-brand-650" /> {rec.matchingScore}% {matchQuality}
+                                        </span>
+                                        <span className="text-[8px] bg-brand-50 border border-brand-200 text-brand-700 px-1.5 py-0.5 rounded font-bold font-mono">
+                                          Detour: {rec.deviation.toFixed(1)} km
+                                        </span>
+                                        <span className="text-[8px] bg-brand-100 text-brand-850 px-1.5 py-0.5 rounded font-bold font-mono">
+                                          {pickupDist.toFixed(1)} km away
+                                        </span>
+                                      </div>
+
+                                      <div>
+                                        <h4 className="font-display font-black text-xs text-natural-text truncate uppercase leading-tight mt-0.5">{rec.foodListing.foodName}</h4>
+                                        <p className="text-[10px] text-natural-muted font-bold mt-0.5">{rec.foodListing.provider?.businessName}</p>
+                                      </div>
+
+                                      <div className="grid grid-cols-2 gap-2 bg-[#FAF9F5] p-2 rounded-lg border border-natural-border text-[9px] font-semibold font-mono">
+                                        <div>
+                                          <span className="block text-[7px] uppercase font-bold tracking-wider text-natural-muted font-sans">Kitchen prep</span>
+                                          <span className="text-natural-text font-bold block">{formatTime(rec.foodListing.preparationTime)}</span>
+                                        </div>
+                                        <div>
+                                          <span className="block text-[7px] uppercase font-bold tracking-wider text-natural-muted font-sans">Safety window</span>
+                                          <span className="text-brand-600 font-bold block">{formatTime(rec.foodListing.expiryTime)}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="pt-2 border-t border-natural-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs bg-white">
+                                    <div className="text-[10px] space-y-0.5 text-natural-muted font-medium flex-1 min-w-0">
+                                      <div className="truncate"><span className="font-bold text-natural-text uppercase text-[8px] tracking-wider mr-1">Pickup:</span> {rec.foodListing.pickupAddress}</div>
+                                      <div className="truncate">
+                                        <span className="font-bold text-natural-text uppercase text-[8px] tracking-wider mr-1">Destination:</span> 
+                                        {rec.zone.name}
+                                        <span className={`ml-2 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                          rec.zone.source === 'COMMUNITY_REPORTED'
+                                            ? 'bg-amber-50 text-amber-850 border border-amber-250' 
+                                            : 'bg-brand-50 text-brand-700 border border-brand-100'
+                                        }`}>
+                                          {rec.zone.source === 'COMMUNITY_REPORTED' ? 'Verified community report' : 'Verified destination'}
+                                        </span>
+                                      </div>
+                                      <div className="text-[9px] font-mono font-semibold text-natural-muted mt-0.5">
+                                        {rec.distanceToDestination ? rec.distanceToDestination.toFixed(1) : '2.1'} km ahead • {rec.deviation.toFixed(1)} km route deviation
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-3 shrink-0 self-end sm:self-auto">
+                                      <div className="text-right">
+                                        <span className="text-[8px] uppercase font-bold text-brand-700 tracking-wider block font-mono font-black">Est Payout</span>
+                                        <strong className="text-xs font-mono font-black text-brand-600 flex items-center gap-1">
+                                          <Coins className="w-3.5 h-3.5" /> {expectedCoins} coins
+                                        </strong>
+                                      </div>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleAcceptTask(rec);
+                                        }}
+                                        className="btn-primary py-2 px-3 text-[10px]"
+                                      >
+                                        Accept Task
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}                {/* 2. Sustainability Impact View */}
                 {activeTab === 'IMPACT' && (
                   <div className="p-5 space-y-5 text-left text-xs">
                     <div>
@@ -1663,6 +2192,54 @@ export const VolunteerDashboard: React.FC = () => {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 4. Shelter list */}
+                {activeTab === 'SHELTERS' && (
+                  <div className="p-4 space-y-4">
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Available Shelter Food Handover Tasks</h3>
+                    <p className="text-[10px] text-gray-500 mt-1 leading-relaxed font-semibold">
+                      Claim verified requirements from city shelters, route with geofencing, and confirm handovers with OTP & photos.
+                    </p>
+
+                    {availableShelterDeliveries.length === 0 ? (
+                      <div className="p-8 text-center text-gray-450 text-xs bg-gray-50 rounded-xl">
+                        No active shelter requirements available in your city.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {availableShelterDeliveries.map((item: any) => {
+                          const req = item.requirement;
+                          const distance = item.distance;
+                          return (
+                            <div key={req.id} className="border border-gray-200 rounded-xl p-4 bg-[#FAF9F5]/40 flex flex-col justify-between items-stretch gap-3">
+                              <div>
+                                <h4 className="font-bold text-xs text-gray-900 uppercase">{req.shelter.name}</h4>
+                                <p className="text-[10px] text-gray-500 font-medium">{req.shelter.address}</p>
+                                <div className="flex flex-wrap gap-2 mt-2 text-[10px] font-semibold">
+                                  <span className="bg-brand-50 text-brand-700 border border-brand-100 px-2 py-0.5 rounded font-bold">
+                                    {req.quantityRequired} {req.unit} ({req.foodType})
+                                  </span>
+                                  <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono">
+                                    Distance: {distance !== undefined && distance !== null ? `${distance.toFixed(2)} km` : 'N/A'}
+                                  </span>
+                                  <span className="bg-orange-50 text-orange-700 border border-orange-200 px-2 py-0.5 rounded uppercase font-extrabold text-[8px] tracking-wider">
+                                    {req.priority}
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleAcceptShelterDelivery(req.id)}
+                                className="w-full px-4 py-2 bg-brand-650 hover:bg-brand-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition"
+                              >
+                                Accept Task
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

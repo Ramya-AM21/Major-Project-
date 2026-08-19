@@ -12,6 +12,7 @@ import { VolunteerRoutes } from './pages/VolunteerRoutes';
 import { VolunteerRewards } from './pages/VolunteerRewards';
 import { FindMatchingFood } from './pages/FindMatchingFood';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { CoordinatorDashboard } from './pages/CoordinatorDashboard';
 
 // Protected Route Wrapper to enforce JWT and Role based permissions
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ 
@@ -171,6 +172,28 @@ export const App: React.FC = () => {
               <ProtectedRoute allowedRoles={['ADMIN']}>
                 <DashboardLayout>
                   <AdminDashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Coordinator Dashboard Routes */}
+          <Route 
+            path="/coordinator/dashboard" 
+            element={
+              <ProtectedRoute allowedRoles={['COORDINATOR']}>
+                <DashboardLayout>
+                  <CoordinatorDashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/coordinator/zones" 
+            element={
+              <ProtectedRoute allowedRoles={['COORDINATOR']}>
+                <DashboardLayout>
+                  <CoordinatorDashboard />
                 </DashboardLayout>
               </ProtectedRoute>
             } 

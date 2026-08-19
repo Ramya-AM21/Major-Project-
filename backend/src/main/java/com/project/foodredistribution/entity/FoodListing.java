@@ -1,7 +1,7 @@
 package com.project.foodredistribution.entity;
 
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -31,10 +31,12 @@ public class FoodListing {
     private String allergens;
 
     @Column(nullable = false)
-    private LocalDateTime preparationTime;
+    private Instant preparationTime;
 
     @Column(nullable = false)
-    private LocalDateTime expiryTime;
+    private Instant expiryTime;
+
+    private Integer safeConsumptionHours;
 
     private String imageUrl;
 
@@ -57,10 +59,17 @@ public class FoodListing {
     private Double destinationLongitude;
 
     @Column(nullable = false)
-    private String status = "AVAILABLE"; // AVAILABLE, MATCHED, PICKED_UP, IN_TRANSIT, DELIVERED, EXPIRED, CANCELLED
+    private String status = "AVAILABLE"; // DRAFT, SCHEDULED, AVAILABLE, ACCEPTED, PICKED_UP, IN_TRANSIT, DELIVERED, EXPIRED, CANCELLED
 
     @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private Instant createdAt = Instant.now();
+
+    @Enumerated(EnumType.STRING)
+    private DistributionSession distributionSession;
+
+    private Instant availableFrom;
+
+    private Instant availableUntil;
 
     public FoodListing() {
     }
@@ -87,11 +96,14 @@ public class FoodListing {
     public String getAllergens() { return allergens; }
     public void setAllergens(String allergens) { this.allergens = allergens; }
 
-    public LocalDateTime getPreparationTime() { return preparationTime; }
-    public void setPreparationTime(LocalDateTime preparationTime) { this.preparationTime = preparationTime; }
+    public Instant getPreparationTime() { return preparationTime; }
+    public void setPreparationTime(Instant preparationTime) { this.preparationTime = preparationTime; }
 
-    public LocalDateTime getExpiryTime() { return expiryTime; }
-    public void setExpiryTime(LocalDateTime expiryTime) { this.expiryTime = expiryTime; }
+    public Instant getExpiryTime() { return expiryTime; }
+    public void setExpiryTime(Instant expiryTime) { this.expiryTime = expiryTime; }
+
+    public Integer getSafeConsumptionHours() { return safeConsumptionHours; }
+    public void setSafeConsumptionHours(Integer safeConsumptionHours) { this.safeConsumptionHours = safeConsumptionHours; }
 
     public String getImageUrl() { return imageUrl; }
     public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
@@ -120,6 +132,21 @@ public class FoodListing {
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    public DistributionSession getDistributionSession() { return distributionSession; }
+    public void setDistributionSession(DistributionSession distributionSession) { this.distributionSession = distributionSession; }
+
+    public Instant getAvailableFrom() { return availableFrom; }
+    public void setAvailableFrom(Instant availableFrom) { this.availableFrom = availableFrom; }
+
+    public Instant getAvailableUntil() { return availableUntil; }
+    public void setAvailableUntil(Instant availableUntil) { this.availableUntil = availableUntil; }
+
+    public Instant getEffectiveAvailableUntil() {
+        if (availableUntil == null) return expiryTime;
+        if (expiryTime == null) return availableUntil;
+        return availableUntil.isBefore(expiryTime) ? availableUntil : expiryTime;
+    }
 }
