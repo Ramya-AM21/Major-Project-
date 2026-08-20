@@ -55,4 +55,27 @@ public class FoodListingController {
         FoodListing cancelled = foodListingService.cancelListing(id, principal.getName());
         return ResponseEntity.ok(cancelled);
     }
+
+    @PostMapping("/analyze-image")
+    @PreAuthorize("hasRole('PROVIDER')")
+    public ResponseEntity<java.util.Map<String, Object>> analyzeFoodImage(
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("Uploaded file cannot be empty");
+        }
+        
+        try {
+            byte[] bytes = file.getBytes();
+            String filename = file.getOriginalFilename();
+            if (filename == null) {
+                filename = "food_image.png";
+            }
+            
+            java.util.Map<String, Object> analysisResult = foodListingService.analyzeFoodImage(bytes, filename);
+            return ResponseEntity.ok(analysisResult);
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("Failed to read food photo bytes", e);
+        }
+    }
 }

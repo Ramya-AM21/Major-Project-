@@ -112,7 +112,7 @@ public class ShelterDeliveryService {
         }
 
         auditLogService.log(adminEmail, "ADMIN", "SHELTER_VERIFIED", "Shelter", shelterId.toString(), "Shelter and associated requirements verified by Admin");
-        notificationService.sendNotification(shelter.getCoordinator().getEmail(), "Shelter Verified! 🎉", "Your shelter " + shelter.getName() + " has been verified.");
+        notificationService.sendNotification(shelter.getCoordinator().getEmail(), "Shelter Verified! ", "Your shelter " + shelter.getName() + " has been verified.");
         return saved;
     }
 
@@ -136,7 +136,7 @@ public class ShelterDeliveryService {
         }
 
         auditLogService.log(adminEmail, "ADMIN", "SHELTER_REJECTED", "Shelter", shelterId.toString(), "Shelter rejected by Admin: " + reason);
-        notificationService.sendNotification(shelter.getCoordinator().getEmail(), "Shelter Rejected ❌", "Your shelter " + shelter.getName() + " was rejected. Reason: " + reason);
+        notificationService.sendNotification(shelter.getCoordinator().getEmail(), "Shelter Rejected ", "Your shelter " + shelter.getName() + " was rejected. Reason: " + reason);
         return saved;
     }
 

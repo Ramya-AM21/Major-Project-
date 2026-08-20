@@ -128,4 +128,41 @@ public class AiIntegrationService {
         fallback.put("source", "Baseline System Security (AI Offline Fallback)");
         return fallback;
     }
+
+    public Map<String, Object> analyzeFoodImage(byte[] imageBytes, String filename) {
+        try {
+            String url = aiServiceUrl + "/api/v1/ai/analyze-food";
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA);
+
+            org.springframework.util.LinkedMultiValueMap<String, Object> body = new org.springframework.util.LinkedMultiValueMap<>();
+            
+            org.springframework.core.io.ByteArrayResource fileResource = new org.springframework.core.io.ByteArrayResource(imageBytes) {
+                @Override
+                public String getFilename() {
+                    return filename;
+                }
+            };
+            
+            body.add("image", fileResource);
+
+            org.springframework.http.HttpEntity<org.springframework.util.LinkedMultiValueMap<String, Object>> requestEntity =
+                    new org.springframework.http.HttpEntity<>(body, headers);
+
+            ResponseEntity<Map> response = restTemplate.postForEntity(url, requestEntity, Map.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> res = (Map<String, Object>) response.getBody();
+                return res;
+            }
+        } catch (Exception ex) {
+            log.warn("FastAPI food analysis service unavailable: {}.", ex.getMessage());
+        }
+
+        Map<String, Object> errorResult = new HashMap<>();
+        errorResult.put("status", "ERROR");
+        errorResult.put("foodName", "");
+        errorResult.put("category", "");
+        errorResult.put("confidence", 0.0);
+        return errorResult;
+    }
 }

@@ -38,6 +38,14 @@ public class Verification {
 
     private Double verificationConfidence = 1.0; // Calculated based on GPS, photo checks, speed
 
+    private LocalDateTime pickupOtpExpiry = LocalDateTime.now().plusHours(3);
+
+    private LocalDateTime deliveryOtpExpiry = LocalDateTime.now().plusHours(3);
+
+    private Integer pickupOtpAttempts = 0;
+
+    private Integer deliveryOtpAttempts = 0;
+
     public Verification() {
     }
 
@@ -80,4 +88,16 @@ public class Verification {
 
     public Double getVerificationConfidence() { return verificationConfidence; }
     public void setVerificationConfidence(Double verificationConfidence) { this.verificationConfidence = verificationConfidence; }
+
+    public LocalDateTime getPickupOtpExpiry() { return pickupOtpExpiry; }
+    public void setPickupOtpExpiry(LocalDateTime pickupOtpExpiry) { this.pickupOtpExpiry = pickupOtpExpiry; }
+
+    public LocalDateTime getDeliveryOtpExpiry() { return deliveryOtpExpiry; }
+    public void setDeliveryOtpExpiry(LocalDateTime deliveryOtpExpiry) { this.deliveryOtpExpiry = deliveryOtpExpiry; }
+
+    public Integer getPickupOtpAttempts() { return pickupOtpAttempts; }
+    public void setPickupOtpAttempts(Integer pickupOtpAttempts) { this.pickupOtpAttempts = pickupOtpAttempts; }
+
+    public Integer getDeliveryOtpAttempts() { return deliveryOtpAttempts; }
+    public void setDeliveryOtpAttempts(Integer deliveryOtpAttempts) { this.deliveryOtpAttempts = deliveryOtpAttempts; }
 }

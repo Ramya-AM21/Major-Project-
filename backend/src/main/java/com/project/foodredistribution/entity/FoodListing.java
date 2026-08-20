@@ -71,7 +71,25 @@ public class FoodListing {
 
     private Instant availableUntil;
 
+    private String entryMethod = "MANUAL"; // MANUAL, AI_ASSISTED
+
+    private String description;
+
+    private String foodType;
+
+    private Boolean aiDetected;
+
+    private Double aiConfidence;
+
+    @Column(columnDefinition = "TEXT")
+    private String aiExtractedData;
+
+    private Boolean providerConfirmed;
+
+    private String aiSource;
+
     public FoodListing() {
+        // ...
     }
 
     // Getters and Setters
@@ -149,4 +167,28 @@ public class FoodListing {
         if (expiryTime == null) return availableUntil;
         return availableUntil.isBefore(expiryTime) ? availableUntil : expiryTime;
     }
+
+    public String getEntryMethod() { return entryMethod; }
+    public void setEntryMethod(String entryMethod) { this.entryMethod = entryMethod; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+
+    public String getFoodType() { return foodType; }
+    public void setFoodType(String foodType) { this.foodType = foodType; }
+
+    public Boolean getAiDetected() { return aiDetected; }
+    public void setAiDetected(Boolean aiDetected) { this.aiDetected = aiDetected; }
+
+    public Double getAiConfidence() { return aiConfidence; }
+    public void setAiConfidence(Double aiConfidence) { this.aiConfidence = aiConfidence; }
+
+    public String getAiExtractedData() { return aiExtractedData; }
+    public void setAiExtractedData(String aiExtractedData) { this.aiExtractedData = aiExtractedData; }
+
+    public Boolean getProviderConfirmed() { return providerConfirmed; }
+    public void setProviderConfirmed(Boolean providerConfirmed) { this.providerConfirmed = providerConfirmed; }
+
+    public String getAiSource() { return aiSource; }
+    public void setAiSource(String aiSource) { this.aiSource = aiSource; }
 }

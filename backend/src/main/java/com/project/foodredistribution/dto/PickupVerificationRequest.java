@@ -7,6 +7,8 @@ public class PickupVerificationRequest {
     private String otp;
     private Double latitude;
     private Double longitude;
+    private Double accuracy;
+    private String timestamp;
 
     public PickupVerificationRequest() {
     }
@@ -23,4 +25,10 @@ public class PickupVerificationRequest {
 
     public Double getLongitude() { return longitude; }
     public void setLongitude(Double longitude) { this.longitude = longitude; }
+
+    public Double getAccuracy() { return accuracy; }
+    public void setAccuracy(Double accuracy) { this.accuracy = accuracy; }
+
+    public String getTimestamp() { return timestamp; }
+    public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
 }

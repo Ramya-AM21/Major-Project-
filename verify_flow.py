@@ -62,7 +62,13 @@ def test_workflow():
     if status != 200 or not zones:
         print(f"[FAIL] Failed to fetch zones: {zones}")
         sys.exit(1)
+    
     target_zone = zones[0]
+    for z in zones:
+        if "central" in z.get("name", "").lower() or "transit" in z.get("name", "").lower():
+            target_zone = z
+            break
+            
     print(f"   Target dropoff zone selected: {target_zone['name']} (ID: {target_zone['id']})")
 
     import datetime

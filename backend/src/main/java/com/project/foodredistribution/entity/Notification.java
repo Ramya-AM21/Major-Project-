@@ -18,7 +18,7 @@ public class Notification {
     @Column(nullable = false)
     private String title;
 
-    @Column(nullable = false, length = 1000)
+    @Column(name = "description", nullable = false, length = 1000)
     private String desc;
 
     private boolean isRead = false;

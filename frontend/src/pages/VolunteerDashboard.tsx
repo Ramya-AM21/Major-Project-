@@ -850,7 +850,9 @@ export const VolunteerDashboard: React.FC = () => {
         taskId: activeTask.id,
         otp: pickupOtp,
         latitude: currentLat,
-        longitude: currentLng
+        longitude: currentLng,
+        accuracy: gpsAccuracy,
+        timestamp: new Date().toISOString()
       });
       setPickupOtp('');
       fetchVolunteerData();
@@ -872,6 +874,8 @@ export const VolunteerDashboard: React.FC = () => {
         otp: deliveryOtp,
         latitude: currentLat,
         longitude: currentLng,
+        accuracy: gpsAccuracy,
+        timestamp: new Date().toISOString(),
         proofImageUrl: ""
       });
       setDeliveryOtp('');
@@ -900,6 +904,9 @@ export const VolunteerDashboard: React.FC = () => {
       formData.append("taskId", activeTask.id);
       formData.append("latitude", currentLat.toString());
       formData.append("longitude", currentLng.toString());
+      if (gpsAccuracy !== null) {
+        formData.append("accuracy", gpsAccuracy.toString());
+      }
 
       await axios.post("/api/v1/verification/upload-proof", formData, {
         headers: {
@@ -1053,7 +1060,7 @@ export const VolunteerDashboard: React.FC = () => {
               <div className="h-8 w-px bg-natural-border"></div>
               <div>
                 <span className="text-[8px] text-natural-muted uppercase font-bold tracking-wider block">Wallet Balance</span>
-                <span className="text-lg font-mono font-black text-natural-text">{showCompletedReward.prevBalance} ➔ {showCompletedReward.newBalance}</span>
+                <span className="text-lg font-mono font-black text-natural-text">{showCompletedReward.prevBalance}  {showCompletedReward.newBalance}</span>
               </div>
             </div>
             <p className="text-[10px] text-natural-muted italic">"Thank you for helping reduce food waste."</p>
@@ -2143,13 +2150,13 @@ export const VolunteerDashboard: React.FC = () => {
                       <div className="p-3 border border-natural-border bg-white rounded-xl">
                         <span className="text-[8px] text-natural-muted uppercase font-bold tracking-wider block">Food Weight Avoided</span>
                         <strong className="text-sm font-mono text-natural-text font-black block mt-1">{(vStats.mealsDelivered * 0.5).toFixed(1)} kg</strong>
-                        <span className="text-[8px] text-brand-600 font-bold block mt-1">✓ Diverted from landfill decomposition</span>
+                        <span className="text-[8px] text-brand-600 font-bold block mt-1"> Diverted from landfill decomposition</span>
                       </div>
                       
                       <div className="p-3 border border-natural-border bg-white rounded-xl">
                         <span className="text-[8px] text-natural-muted uppercase font-bold tracking-wider block">Equivalent carbon offset</span>
                         <strong className="text-sm font-mono text-natural-text font-black block mt-1">{(vStats.mealsDelivered * 0.5 * 2.5).toFixed(1)} kg CO2e</strong>
-                        <span className="text-[8px] text-brand-600 font-bold block mt-1">✓ Equivalent to 4 saplings planted</span>
+                        <span className="text-[8px] text-brand-600 font-bold block mt-1"> Equivalent to 4 saplings planted</span>
                       </div>
                     </div>
                   </div>
@@ -2172,20 +2179,20 @@ export const VolunteerDashboard: React.FC = () => {
                             <div className="space-y-1 flex-1 min-w-0 mr-4">
                               <div className="flex items-center gap-1.5">
                                 <span className="inline-flex items-center text-[7px] text-brand-700 bg-brand-50 border border-brand-100 font-black rounded px-1.5 py-0.5 uppercase tracking-wide">
-                                  ✓ Verified Complete
+                                   Verified Complete
                                 </span>
                                 <span className="text-[8px] font-mono text-natural-muted font-bold">#FD-{t.id.substring(0, 6).toUpperCase()}</span>
                               </div>
                               <h5 className="font-display font-black text-xs text-natural-text truncate uppercase mt-0.5">{t.foodListing.foodName}</h5>
                               <p className="text-[10px] text-natural-muted leading-relaxed font-semibold">
-                                From: {t.foodListing.provider?.businessName || 'Provider'} ➔ To: {t.zone.name}
+                                From: {t.foodListing.provider?.businessName || 'Provider'}  To: {t.zone.name}
                               </p>
                               <span className="text-[8px] text-natural-muted block font-mono">
                                 Quantity: {t.foodListing.quantity} {t.foodListing.unit}
                               </span>
                             </div>
                             <div className="text-right shrink-0">
-                              <strong className="text-xs font-mono font-black text-brand-600 block">🪙 +{getExpectedRewardForTask(t)} coins</strong>
+                              <strong className="text-xs font-mono font-black text-brand-600 block"> +{getExpectedRewardForTask(t)} coins</strong>
                               <span className="text-[8px] text-natural-muted block mt-0.5 font-mono">
                                 {new Date(t.createdAt || new Date()).toLocaleDateString([], { month: 'short', day: 'numeric' })}
                               </span>

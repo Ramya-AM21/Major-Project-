@@ -418,7 +418,7 @@ export const VolunteerRoutes: React.FC = () => {
                 <div key={rt.id} className="p-4 hover:bg-[#FAF9F5] transition-colors flex items-center justify-between text-xs gap-3">
                   <div className="min-w-0">
                     <h5 className="font-display font-black text-natural-text uppercase tracking-wider truncate flex items-center gap-1">
-                      <Route className="w-4 h-4 text-brand-600 shrink-0" /> {rt.startName.split(',')[0]} ➔ {rt.endName.split(',')[0]}
+                      <Route className="w-4 h-4 text-brand-600 shrink-0" /> {rt.startName.split(',')[0]}  {rt.endName.split(',')[0]}
                     </h5>
                     <div className="text-[9px] text-natural-muted mt-2 flex flex-wrap gap-1.5 font-bold uppercase tracking-wider font-mono">
                       <span className="bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded">{rt.routeType}</span>

@@ -7,6 +7,8 @@ public class DeliveryVerificationRequest {
     private String otp;
     private Double latitude;
     private Double longitude;
+    private Double accuracy;
+    private String timestamp;
     private String proofImageUrl;
 
     public DeliveryVerificationRequest() {
@@ -24,6 +26,12 @@ public class DeliveryVerificationRequest {
 
     public Double getLongitude() { return longitude; }
     public void setLongitude(Double longitude) { this.longitude = longitude; }
+
+    public Double getAccuracy() { return accuracy; }
+    public void setAccuracy(Double accuracy) { this.accuracy = accuracy; }
+
+    public String getTimestamp() { return timestamp; }
+    public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
 
     public String getProofImageUrl() { return proofImageUrl; }
     public void setProofImageUrl(String proofImageUrl) { this.proofImageUrl = proofImageUrl; }

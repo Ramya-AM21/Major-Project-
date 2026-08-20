@@ -77,7 +77,8 @@ public class DeliveryTaskController {
     }
 
     @PostMapping("/{id}/location")
-    public ResponseEntity<DeliveryTask> updateLocation(@PathVariable UUID id, @RequestBody java.util.Map<String, Object> payload) {
+    @PreAuthorize("hasRole('VOLUNTEER')")
+    public ResponseEntity<DeliveryTask> updateLocation(@PathVariable UUID id, @RequestBody java.util.Map<String, Object> payload, Principal principal) {
         Object latObj = payload.get("latitude");
         Object lngObj = payload.get("longitude");
         if (latObj == null || lngObj == null) {
@@ -98,7 +99,7 @@ public class DeliveryTaskController {
             timestamp = timeObj.toString();
         }
 
-        DeliveryTask updated = deliveryTaskService.updateTaskLocation(id, latitude, longitude, accuracy, timestamp);
+        DeliveryTask updated = deliveryTaskService.updateTaskLocation(id, latitude, longitude, accuracy, timestamp, principal.getName());
         return ResponseEntity.ok(updated);
     }
 

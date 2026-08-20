@@ -34,6 +34,7 @@ public class FoodListingService {
     private final AuditLogService auditLogService;
     private final SessionConfig sessionConfig;
     private final com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler;
+    private final AiIntegrationService aiIntegrationService;
 
     public FoodListingService(FoodListingRepository foodListingRepository,
                               FoodProviderRepository foodProviderRepository,
@@ -41,7 +42,8 @@ public class FoodListingService {
                               @Lazy DeliveryTaskService deliveryTaskService,
                               AuditLogService auditLogService,
                               SessionConfig sessionConfig,
-                              com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler) {
+                              com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler,
+                              AiIntegrationService aiIntegrationService) {
         this.foodListingRepository = foodListingRepository;
         this.foodProviderRepository = foodProviderRepository;
         this.zoneRepository = zoneRepository;
@@ -49,6 +51,28 @@ public class FoodListingService {
         this.auditLogService = auditLogService;
         this.sessionConfig = sessionConfig;
         this.webSocketHandler = webSocketHandler;
+        this.aiIntegrationService = aiIntegrationService;
+    }
+
+    public java.util.Map<String, Object> analyzeFoodImage(byte[] imageBytes, String filename) {
+        java.util.Map<String, Object> res = aiIntegrationService.analyzeFoodImage(imageBytes, filename);
+        if (res == null) {
+            res = new java.util.HashMap<>();
+        }
+        try {
+            java.io.File uploadDir = new java.io.File("uploads");
+            if (!uploadDir.exists()) {
+                uploadDir.mkdirs();
+            }
+            String cleanFilename = filename.replaceAll("[^a-zA-Z0-9\\.\\-]", "_");
+            String uniqueName = java.util.UUID.randomUUID().toString() + "_" + cleanFilename;
+            java.io.File destFile = new java.io.File(uploadDir, uniqueName);
+            java.nio.file.Files.write(destFile.toPath(), imageBytes);
+            res.put("imageUrl", "/uploads/" + uniqueName);
+        } catch (java.io.IOException e) {
+            org.slf4j.LoggerFactory.getLogger(FoodListingService.class).warn("Failed to save food listing image", e);
+        }
+        return res;
     }
 
     private LocalDate getTargetSessionDate(DistributionSession session, Instant now, ZoneId zoneId) {
@@ -296,5 +320,133 @@ public class FoodListingService {
                 );
             }
         }
+    }
+
+    public java.util.Map<String, Object> mergeAiAndProviderData(java.util.Map<String, Object> aiResult, String providerFoodDetailsJson) {
+        java.util.Map<String, Object> manualDetails = null;
+        if (providerFoodDetailsJson != null && !providerFoodDetailsJson.trim().isEmpty()) {
+            try {
+                manualDetails = new com.fasterxml.jackson.databind.ObjectMapper().readValue(providerFoodDetailsJson, java.util.Map.class);
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+        
+        java.util.Map<String, Object> mergedFood = new java.util.HashMap<>();
+        
+        // 1. Determine if AI analysis was successful
+        boolean aiSuccess = aiResult != null && "SUCCESS".equals(aiResult.get("status"));
+        
+        // Helper to extract manual field
+        String manualFoodName = getAsString(manualDetails, "foodName");
+        String manualCategory = getAsString(manualDetails, "category");
+        String manualFoodType = getAsString(manualDetails, "foodType");
+        String manualDescription = getAsString(manualDetails, "description");
+        String manualQuantity = getAsString(manualDetails, "quantity");
+        String manualUnit = getAsString(manualDetails, "unit");
+        String manualAllergens = getAsString(manualDetails, "allergens");
+        String manualSafeHours = getAsString(manualDetails, "safeConsumptionHours");
+
+        // AI field values
+        String aiFoodName = aiSuccess ? getAsString(aiResult, "food_name") : null;
+        String aiCategoryStr = aiSuccess ? getAsString(aiResult, "food_category") : null;
+        String aiFoodType = aiSuccess ? getAsString(aiResult, "food_type") : null;
+        String aiDescription = aiSuccess ? getAsString(aiResult, "description") : null;
+        
+        // Category mapping: Cooked Meal / Fresh Fruit / Bakery etc. might be returned by AI
+        // Wait, the frontend category dropdown supports VEG, NON_VEG, EGG.
+        // How do we map AI category or food_type to the frontend VEG/NON_VEG/EGG?
+        String mappedCategory = null;
+        if (aiSuccess && aiFoodType != null) {
+            String typeLower = aiFoodType.toLowerCase();
+            if (typeLower.contains("non-veg") || typeLower.contains("non veg") || typeLower.contains("meat") || typeLower.contains("chicken") || typeLower.contains("fish")) {
+                mappedCategory = "NON_VEG";
+            } else if (typeLower.contains("egg")) {
+                mappedCategory = "EGG";
+            } else if (typeLower.contains("veg") || typeLower.contains("vegetarian")) {
+                mappedCategory = "VEG";
+            }
+        }
+        if (mappedCategory == null && aiSuccess && aiCategoryStr != null) {
+            String catLower = aiCategoryStr.toLowerCase();
+            if (catLower.contains("non-veg") || catLower.contains("non veg") || catLower.contains("meat") || catLower.contains("chicken") || catLower.contains("fish")) {
+                mappedCategory = "NON_VEG";
+            }
+        }
+        if (mappedCategory == null) {
+            mappedCategory = "VEG"; // Default fallback
+        }
+
+        // Allergens mapping
+        String aiAllergens = null;
+        if (aiSuccess && aiResult.get("possible_allergens") instanceof java.util.List) {
+            java.util.List<String> list = (java.util.List<String>) aiResult.get("possible_allergens");
+            if (!list.isEmpty()) {
+                aiAllergens = String.join(", ", list);
+            }
+        }
+
+        // Apply Priority 1 (Manual) > Priority 2 (AI)
+        mergedFood.put("foodName", isNotEmpty(manualFoodName) ? manualFoodName : (aiSuccess && isNotEmpty(aiFoodName) ? aiFoodName : ""));
+        mergedFood.put("category", isNotEmpty(manualCategory) ? manualCategory : mappedCategory);
+        mergedFood.put("foodType", isNotEmpty(manualFoodType) ? manualFoodType : (aiSuccess && isNotEmpty(aiFoodType) ? aiFoodType : "Vegetarian"));
+        mergedFood.put("description", isNotEmpty(manualDescription) ? manualDescription : (aiSuccess && isNotEmpty(aiDescription) ? aiDescription : ""));
+        
+        mergedFood.put("quantity", isNotEmpty(manualQuantity) ? manualQuantity : "");
+        mergedFood.put("unit", isNotEmpty(manualUnit) ? manualUnit : "MEALS");
+        mergedFood.put("allergens", isNotEmpty(manualAllergens) ? manualAllergens : (aiSuccess && isNotEmpty(aiAllergens) ? aiAllergens : ""));
+        mergedFood.put("safeConsumptionHours", isNotEmpty(manualSafeHours) ? manualSafeHours : "");
+
+        // Build the metadata response
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("success", aiSuccess);
+        result.put("source", aiSuccess ? aiResult.getOrDefault("source", "ai_image_analysis") : "manual");
+        result.put("imageUrl", aiResult != null ? aiResult.get("imageUrl") : "");
+        result.put("food", mergedFood);
+        
+        java.util.Map<String, Object> aiMeta = new java.util.HashMap<>();
+        double conf = 0.0;
+        if (aiSuccess && aiResult.get("confidence") != null) {
+            try {
+                conf = Double.parseDouble(aiResult.get("confidence").toString());
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+        aiMeta.put("confidence", conf);
+        
+        java.util.List<String> fieldsDetected = new java.util.ArrayList<>();
+        if (aiSuccess) {
+            if (isNotEmpty(aiFoodName)) fieldsDetected.add("foodName");
+            if (isNotEmpty(aiCategoryStr) || isNotEmpty(aiFoodType)) {
+                fieldsDetected.add("category");
+                fieldsDetected.add("foodType");
+            }
+            if (isNotEmpty(aiDescription)) fieldsDetected.add("description");
+            if (isNotEmpty(aiAllergens)) fieldsDetected.add("allergens");
+        }
+        aiMeta.put("fieldsDetected", fieldsDetected);
+        
+        String extractedJsonStr = "";
+        try {
+            extractedJsonStr = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(aiResult);
+        } catch (Exception e) {
+            // ignore
+        }
+        aiMeta.put("extractedData", extractedJsonStr);
+        
+        result.put("ai", aiMeta);
+        return result;
+    }
+
+    private String getAsString(java.util.Map<String, Object> map, String key) {
+        if (map == null || !map.containsKey(key) || map.get(key) == null) {
+            return null;
+        }
+        return map.get(key).toString().trim();
+    }
+    
+    private boolean isNotEmpty(String str) {
+        return str != null && !str.trim().isEmpty();
     }
 }

@@ -15,6 +15,7 @@ public class TokenTransaction {
     @Column(nullable = false)
     private UUID volunteerId;
 
+    @Column(unique = true)
     private UUID taskId;
 
     @Column(nullable = false)

@@ -33,6 +33,15 @@ public class DeliveryTaskService {
     private final com.project.foodredistribution.websocket.LiveTrackingWebSocketHandler webSocketHandler;
     private final VolunteerRouteRepository volunteerRouteRepository;
 
+    @org.springframework.beans.factory.annotation.Value("${app.pickup.arrival-radius-meters:100.0}")
+    private double pickupArrivalRadiusMeters;
+
+    @org.springframework.beans.factory.annotation.Value("${app.destination.arrival-radius-meters:100.0}")
+    private double destinationArrivalRadiusMeters;
+
+    @org.springframework.beans.factory.annotation.Value("${app.matching.gps-accuracy-threshold-meters:50.0}")
+    private double gpsAccuracyThresholdMeters;
+
     public DeliveryTaskService(DeliveryTaskRepository deliveryTaskRepository,
                                FoodListingRepository foodListingRepository,
                                ZoneRepository zoneRepository,
@@ -271,23 +280,77 @@ public class DeliveryTaskService {
 
     @Transactional
     public DeliveryTask verifyPickup(UUID taskId, String otp, double latitude, double longitude) {
+        return verifyPickup(taskId, otp, latitude, longitude, null, null, null);
+    }
+
+    @Transactional
+    public DeliveryTask verifyPickup(UUID taskId, String otp, double latitude, double longitude, Double accuracy, String timestamp, String volunteerEmail) {
         DeliveryTask task = getById(taskId);
         Verification verification = verificationRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Verification record not found for task: " + taskId));
 
+        // 1. Validate volunteer identity & active task ownership
+        if (volunteerEmail != null) {
+            if (task.getVolunteer() == null || !task.getVolunteer().getUser().getEmail().equals(volunteerEmail)) {
+                throw new IllegalArgumentException("You are not authorized for this delivery task.");
+            }
+        }
+
+        // 2. Validate GPS coordinates bounds
+        if (latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0) {
+            throw new IllegalArgumentException("Invalid GPS coordinates bounds.");
+        }
+
+        // 3. Validate GPS accuracy
+        if (accuracy != null && accuracy > gpsAccuracyThresholdMeters) {
+            throw new IllegalArgumentException("Cannot verify location. GPS accuracy is too poor (" + Math.round(accuracy) + "m). Please try again in an area with a clearer GPS signal.");
+        }
+
+        // 4. Validate timestamp freshness (max 10 minutes stale)
+        if (timestamp != null && !timestamp.trim().isEmpty()) {
+            try {
+                java.time.LocalDateTime parsedTime = java.time.LocalDateTime.parse(timestamp.replace("Z", ""));
+                if (java.time.Duration.between(parsedTime, java.time.LocalDateTime.now()).abs().toMinutes() > 10) {
+                    throw new IllegalArgumentException("Location timestamp is stale. Please submit a fresh GPS reading.");
+                }
+            } catch (Exception e) {
+                // Ignore parse errors, fallback
+            }
+        }
+
+        // 5. State checking
         if (!"ACCEPTED".equals(task.getStatus()) && !"NAVIGATING_TO_PICKUP".equals(task.getStatus()) && !"ARRIVED_AT_PICKUP".equals(task.getStatus())) {
-            throw new IllegalArgumentException("Task must be at pickup location before verification");
+            throw new IllegalArgumentException("Task must be at pickup location before verification. Current status: " + task.getStatus());
         }
 
+        // 6. Expiry check
+        if (verification.getPickupOtpExpiry() != null && LocalDateTime.now().isAfter(verification.getPickupOtpExpiry())) {
+            throw new IllegalArgumentException("Pickup OTP code has expired.");
+        }
+
+        // 7. OTP Reuse check
+        if (verification.getPickupTimestamp() != null) {
+            throw new IllegalArgumentException("Pickup OTP has already been verified and cannot be reused.");
+        }
+
+        // 8. Attempt limit check
+        if (verification.getPickupOtpAttempts() != null && verification.getPickupOtpAttempts() >= 3) {
+            throw new IllegalArgumentException("Too many invalid OTP attempts. Handover verification locked.");
+        }
+
+        // 9. OTP Verification
         if (!verification.getPickupOtp().equals(otp)) {
-            throw new IllegalArgumentException("Invalid Pickup OTP code");
+            verification.setPickupOtpAttempts((verification.getPickupOtpAttempts() != null ? verification.getPickupOtpAttempts() : 0) + 1);
+            verificationRepository.save(verification);
+            throw new IllegalArgumentException("Invalid Pickup OTP code. Attempts remaining: " + (3 - verification.getPickupOtpAttempts()));
         }
 
+        // 10. Geofence validation
         FoodListing food = task.getFoodListing();
         double distanceToPickupKm = matchingService.calculateDistance(latitude, longitude, food.getPickupLatitude(), food.getPickupLongitude());
-        boolean radiusVerified = distanceToPickupKm <= 0.25; // 250m
-        if (!radiusVerified) {
-            throw new IllegalArgumentException("Location validation failed. You're still " + Math.round(distanceToPickupKm * 1000) + "m away from the pickup location. Must be within 250m to verify.");
+        double allowedRadiusKm = pickupArrivalRadiusMeters / 1000.0;
+        if (distanceToPickupKm > allowedRadiusKm) {
+            throw new IllegalArgumentException("Location validation failed. You're still " + Math.round(distanceToPickupKm * 1000) + "m away from the pickup location. You must be within " + (int)pickupArrivalRadiusMeters + "m to verify.");
         }
 
         verification.setPickupTimestamp(LocalDateTime.now());
@@ -326,31 +389,86 @@ public class DeliveryTaskService {
 
     @Transactional
     public DeliveryTask verifyDelivery(UUID taskId, String otp, double latitude, double longitude, String proofImageUrl) {
-        // Dropoff OTP verify -> updates state to PHOTO_PENDING
+        return verifyDelivery(taskId, otp, latitude, longitude, null, null, proofImageUrl, null);
+    }
+
+    @Transactional
+    public DeliveryTask verifyDelivery(UUID taskId, String otp, double latitude, double longitude, Double accuracy, String timestamp, String proofImageUrl, String volunteerEmail) {
         DeliveryTask task = getById(taskId);
         Verification verification = verificationRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new ResourceNotFoundException("Verification record not found for task: " + taskId));
 
+        // 1. Validate volunteer identity & active task ownership
+        if (volunteerEmail != null) {
+            if (task.getVolunteer() == null || !task.getVolunteer().getUser().getEmail().equals(volunteerEmail)) {
+                throw new IllegalArgumentException("You are not authorized for this delivery task.");
+            }
+        }
+
+        // 2. Validate GPS coordinates bounds
+        if (latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0) {
+            throw new IllegalArgumentException("Invalid GPS coordinates bounds.");
+        }
+
+        // 3. Validate GPS accuracy
+        if (accuracy != null && accuracy > gpsAccuracyThresholdMeters) {
+            throw new IllegalArgumentException("Cannot verify location. GPS accuracy is too poor (" + Math.round(accuracy) + "m). Please try again in an area with a clearer GPS signal.");
+        }
+
+        // 4. Validate timestamp freshness (max 10 minutes stale)
+        if (timestamp != null && !timestamp.trim().isEmpty()) {
+            try {
+                java.time.LocalDateTime parsedTime = java.time.LocalDateTime.parse(timestamp.replace("Z", ""));
+                if (java.time.Duration.between(parsedTime, java.time.LocalDateTime.now()).abs().toMinutes() > 10) {
+                    throw new IllegalArgumentException("Location timestamp is stale. Please submit a fresh GPS reading.");
+                }
+            } catch (Exception e) {
+                // Ignore parse errors, fallback
+            }
+        }
+
+        // 5. State checking
         if (!"ARRIVED_AT_DESTINATION".equals(task.getStatus()) && !"NAVIGATING_TO_DESTINATION".equals(task.getStatus()) && !"IN_TRANSIT".equals(task.getStatus()) && !"ARRIVED".equals(task.getStatus()) && !"PICKED_UP".equals(task.getStatus())) {
-            throw new IllegalArgumentException("Task must be at destination location before verification");
+            throw new IllegalArgumentException("Task must be at destination location before verification. Current status: " + task.getStatus());
         }
 
+        // 6. Expiry check
+        if (verification.getDeliveryOtpExpiry() != null && LocalDateTime.now().isAfter(verification.getDeliveryOtpExpiry())) {
+            throw new IllegalArgumentException("Delivery OTP code has expired.");
+        }
+
+        // 7. OTP Reuse check
+        if (verification.getDeliveryTimestamp() != null) {
+            throw new IllegalArgumentException("Delivery OTP has already been verified and cannot be reused.");
+        }
+
+        // 8. Attempt limit check
+        if (verification.getDeliveryOtpAttempts() != null && verification.getDeliveryOtpAttempts() >= 3) {
+            throw new IllegalArgumentException("Too many invalid OTP attempts. Delivery verification locked.");
+        }
+
+        // 9. OTP Verification
         if (!verification.getDeliveryOtp().equals(otp)) {
-            throw new IllegalArgumentException("Invalid Destination OTP code. Verification failed.");
+            verification.setDeliveryOtpAttempts((verification.getDeliveryOtpAttempts() != null ? verification.getDeliveryOtpAttempts() : 0) + 1);
+            verificationRepository.save(verification);
+            throw new IllegalArgumentException("Invalid Destination OTP code. Attempts remaining: " + (3 - verification.getDeliveryOtpAttempts()));
         }
 
+        // 10. Geofence validation
         Zone zone = task.getZone();
         double distanceToZoneKm = matchingService.calculateDistance(latitude, longitude, zone.getLatitude(), zone.getLongitude());
-        boolean radiusVerified = distanceToZoneKm <= 0.25; // 250m
-
-        if (!radiusVerified) {
-            throw new IllegalArgumentException("Location validation failed. You are " + Math.round(distanceToZoneKm * 1000) + "m away from the zone. Must be within 250m to verify.");
+        double allowedDestRadiusKm = destinationArrivalRadiusMeters / 1000.0;
+        if (distanceToZoneKm > allowedDestRadiusKm) {
+            throw new IllegalArgumentException("Location validation failed. You are " + Math.round(distanceToZoneKm * 1000) + "m away from the destination. You must be within " + (int)destinationArrivalRadiusMeters + "m to verify.");
         }
 
         verification.setDeliveryTimestamp(LocalDateTime.now());
         verification.setDeliveryLatitude(latitude);
         verification.setDeliveryLongitude(longitude);
         verification.setDeliveryRadiusVerified(true);
+        if (proofImageUrl != null && !proofImageUrl.trim().isEmpty()) {
+            verification.setProofImageUrl(proofImageUrl);
+        }
         verificationRepository.save(verification);
 
         task.setStatus("PROOF_SUBMISSION");
@@ -374,7 +492,43 @@ public class DeliveryTaskService {
 
     @Transactional
     public DeliveryTask processDeliveryProof(UUID taskId, byte[] imageBytes, String filename, double latitude, double longitude) {
+        return processDeliveryProof(taskId, imageBytes, filename, latitude, longitude, null, null);
+    }
+
+    @Transactional
+    public DeliveryTask processDeliveryProof(UUID taskId, byte[] imageBytes, String filename, double latitude, double longitude, Double accuracy, String volunteerEmail) {
         DeliveryTask task = getById(taskId);
+
+        // 1. Validate volunteer identity & active task ownership
+        if (volunteerEmail != null) {
+            if (task.getVolunteer() == null || !task.getVolunteer().getUser().getEmail().equals(volunteerEmail)) {
+                throw new IllegalArgumentException("You are not authorized for this delivery task.");
+            }
+        }
+
+        // 2. Validate GPS coordinates bounds
+        if (latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0) {
+            throw new IllegalArgumentException("Invalid GPS coordinates bounds.");
+        }
+
+        // 3. Validate GPS accuracy
+        if (accuracy != null && accuracy > gpsAccuracyThresholdMeters) {
+            throw new IllegalArgumentException("Cannot verify photo capture location. GPS accuracy is too poor (" + Math.round(accuracy) + "m). Please capture coordinates in a clearer spot.");
+        }
+
+        // 4. Idempotency checks to prevent duplicate rewards
+        if ("COMPLETED".equals(task.getStatus()) || "REWARD_CREDITED".equals(task.getStatus())) {
+            log.warn("Delivery task {} is already completed or rewarded. Skipping reward crediting.", taskId);
+            return task;
+        }
+        List<TokenTransaction> existingTransactions = tokenTransactionRepository.findByTaskId(taskId);
+        if (!existingTransactions.isEmpty()) {
+            log.warn("Reward transaction already exists for task {}. Skipping reward crediting.", taskId);
+            task.setStatus("COMPLETED");
+            deliveryTaskRepository.save(task);
+            return task;
+        }
+
         if (!"PROOF_SUBMISSION".equals(task.getStatus()) && !"PHOTO_PENDING".equals(task.getStatus()) && !"ML_VALIDATION_PENDING".equals(task.getStatus()) && !"PHOTO_REJECTED".equals(task.getStatus())) {
             throw new IllegalArgumentException("Task cannot accept proof photos in current status: " + task.getStatus());
         }
@@ -417,14 +571,14 @@ public class DeliveryTaskService {
             throw new IllegalArgumentException("This image signature has already been uploaded for another task!");
         }
 
-        // Validate Coordinates for image capture point
+        // 5. Geofence verification for image capture point
         Zone zone = task.getZone();
         double distanceToZoneKm = matchingService.calculateDistance(latitude, longitude, zone.getLatitude(), zone.getLongitude());
-        boolean radiusVerified = distanceToZoneKm <= 0.25;
-        if (!radiusVerified) {
+        double allowedDestRadiusKm = destinationArrivalRadiusMeters / 1000.0;
+        if (distanceToZoneKm > allowedDestRadiusKm) {
             task.setStatus("PHOTO_REJECTED");
             deliveryTaskRepository.save(task);
-            throw new IllegalArgumentException("Coordinate check failed: verification photo must be captured within 250m radius of the shelter.");
+            throw new IllegalArgumentException("Coordinate check failed: verification photo must be captured within " + (int)destinationArrivalRadiusMeters + "m radius of the shelter.");
         }
 
         // Save delivery proof meta node
@@ -447,7 +601,7 @@ public class DeliveryTaskService {
         Map<String, Object> mlResult = aiIntegrationService.validateDeliveryProof(taskId, imageBytes, filename, latitude, longitude);
         boolean isOffline = (boolean) mlResult.getOrDefault("isOffline", false);
         boolean isValid = (boolean) mlResult.getOrDefault("valid", false);
-        double confidence = (double) mlResult.getOrDefault("confidence", 0.0);
+        double confidence = ((Number) mlResult.getOrDefault("confidence", 0.0)).doubleValue();
         String reason = (String) mlResult.getOrDefault("reason", "Inference details unavailable");
 
         proof.setMlConfidence(confidence);
@@ -560,7 +714,7 @@ public class DeliveryTaskService {
         // Send notifications
         notificationService.sendNotification(
             volunteer.getUser().getEmail(),
-            "Coins Credited! 🎉",
+            "Coins Credited! ",
             "Your delivery proof was verified. +" + rewardedCoins + " coins have been credited to your wallet!"
         );
         notificationService.sendNotification(
@@ -626,46 +780,86 @@ public class DeliveryTaskService {
 
     @Transactional
     public DeliveryTask updateTaskLocation(UUID taskId, Double latitude, Double longitude) {
-        return updateTaskLocation(taskId, latitude, longitude, null, null);
+        return updateTaskLocation(taskId, latitude, longitude, null, null, null);
     }
 
     @Transactional
     public DeliveryTask updateTaskLocation(UUID taskId, Double latitude, Double longitude, Double accuracy, String timestamp) {
+        return updateTaskLocation(taskId, latitude, longitude, accuracy, timestamp, null);
+    }
+
+    @Transactional
+    public DeliveryTask updateTaskLocation(UUID taskId, Double latitude, Double longitude, Double accuracy, String timestamp, String volunteerEmail) {
         DeliveryTask task = getById(taskId);
 
-        if (accuracy != null && accuracy > matchingService.getGpsAccuracyThresholdMeters()) {
-            log.warn("Ignoring task location update due to low accuracy: {} meters", accuracy);
+        // 1. Volunteer identity & Active task ownership
+        if (volunteerEmail != null) {
+            if (task.getVolunteer() == null || !task.getVolunteer().getUser().getEmail().equals(volunteerEmail)) {
+                throw new IllegalArgumentException("You are not authorized for this delivery task.");
+            }
+        }
+
+        // 2. Latitude and Longitude range validation
+        if (latitude == null || latitude < -90.0 || latitude > 90.0 || longitude == null || longitude < -180.0 || longitude > 180.0) {
+            throw new IllegalArgumentException("Invalid GPS coordinates bounds.");
+        }
+
+        // 3. Accuracy threshold check
+        if (accuracy != null && accuracy > gpsAccuracyThresholdMeters) {
+            log.warn("Ignoring task location update due to low accuracy: {} meters (threshold: {})", accuracy, gpsAccuracyThresholdMeters);
             return task;
+        }
+
+        // 4. Timestamp validity and freshness (max 10 minutes stale)
+        java.time.LocalDateTime updateTime = java.time.LocalDateTime.now();
+        if (timestamp != null && !timestamp.trim().isEmpty()) {
+            try {
+                java.time.LocalDateTime parsedTime = java.time.LocalDateTime.parse(timestamp.replace("Z", ""));
+                if (java.time.Duration.between(parsedTime, java.time.LocalDateTime.now()).abs().toMinutes() > 10) {
+                    log.warn("Ignoring stale location update (older than 10 minutes): {}", timestamp);
+                    return task;
+                }
+                updateTime = parsedTime;
+            } catch (Exception e) {
+                // Fallback to current server time
+            }
+        }
+
+        // 5. Anti-spoofing Speed check
+        List<LocationTracking> history = locationTrackingRepository.findByDeliveryTaskIdOrderByTimestampAsc(taskId);
+        if (!history.isEmpty()) {
+            LocationTracking last = history.get(history.size() - 1);
+            double distKm = matchingService.calculateDistance(last.getLatitude(), last.getLongitude(), latitude, longitude);
+            long timeDiffSecs = java.time.Duration.between(last.getTimestamp(), updateTime).abs().getSeconds();
+            if (timeDiffSecs > 0) {
+                double speedKmh = (distKm / timeDiffSecs) * 3600.0;
+                if (speedKmh > 120.0) { // Reject impossible city transit speeds (> 120 km/h)
+                    log.warn("Suspicious location jump detected for task {}: {} km/h (dist: {} km, time: {} s)", taskId, speedKmh, distKm, timeDiffSecs);
+                    return task;
+                }
+            }
         }
 
         task.setCurrentLatitude(latitude);
         task.setCurrentLongitude(longitude);
-        
-        java.time.LocalDateTime updateTime = java.time.LocalDateTime.now();
-        if (timestamp != null && !timestamp.trim().isEmpty()) {
-            try {
-                updateTime = java.time.LocalDateTime.parse(timestamp.replace("Z", ""));
-            } catch (Exception e) {
-                // Ignore parse error
-            }
-        }
         task.setLastLocationUpdate(updateTime);
-        
+
         Zone zone = task.getZone();
         double remainingDistance = matchingService.calculateDistance(latitude, longitude, zone.getLatitude(), zone.getLongitude());
 
-        // New pickup geofence check
+        // 6. Stage-specific geofencing check (using configurable pickup / destination radius)
         if ("NAVIGATING_TO_PICKUP".equals(task.getStatus())) {
             double distanceToPickup = matchingService.calculateDistance(
                 latitude, longitude, 
                 task.getFoodListing().getPickupLatitude(), task.getFoodListing().getPickupLongitude()
             );
-            if (distanceToPickup <= 0.25) {
+            double allowedRadiusKm = pickupArrivalRadiusMeters / 1000.0;
+            if (distanceToPickup <= allowedRadiusKm) {
                 task.setStatus("ARRIVED_AT_PICKUP");
                 auditLogService.log(
                     task.getVolunteer().getUser().getEmail(),
                     "VOLUNTEER", "ARRIVED_AT_PICKUP", "DeliveryTask", taskId.toString(),
-                    "Coordinates tracking verified arrival at provider location"
+                    "Coordinates tracking verified arrival at provider location within " + (int)pickupArrivalRadiusMeters + "m"
                 );
                 notificationService.sendNotification(
                     task.getVolunteer().getUser().getEmail(),
@@ -676,8 +870,8 @@ public class DeliveryTaskService {
             }
         }
 
-        // If volunteer enters within 250m radius and state is IN_TRANSIT, automatically flag ARRIVED
-        if (("IN_TRANSIT".equals(task.getStatus()) || "PICKED_UP".equals(task.getStatus()) || "NAVIGATING_TO_DESTINATION".equals(task.getStatus())) && remainingDistance <= 0.25) {
+        double allowedDestRadiusKm = destinationArrivalRadiusMeters / 1000.0;
+        if (("IN_TRANSIT".equals(task.getStatus()) || "PICKED_UP".equals(task.getStatus()) || "NAVIGATING_TO_DESTINATION".equals(task.getStatus())) && remainingDistance <= allowedDestRadiusKm) {
             task.setStatus("ARRIVED_AT_DESTINATION");
             auditLogService.log(
                 task.getVolunteer().getUser().getEmail(),
@@ -685,7 +879,7 @@ public class DeliveryTaskService {
                 "ARRIVED_AT_DESTINATION",
                 "DeliveryTask",
                 taskId.toString(),
-                "Coordinates tracking verified arrival within zone range"
+                "Coordinates tracking verified arrival within zone range of " + (int)destinationArrivalRadiusMeters + "m"
             );
             notificationService.sendNotification(
                 task.getVolunteer().getUser().getEmail(),
@@ -698,15 +892,27 @@ public class DeliveryTaskService {
                 "Volunteer has reached the community destination."
             );
             
-            // Broadcast state update
             webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "ARRIVED_AT_DESTINATION"));
         }
 
         DeliveryTask saved = deliveryTaskRepository.save(task);
 
-        LocationTracking tracking = new LocationTracking(task, latitude, longitude);
-        tracking.setTimestamp(updateTime);
-        locationTrackingRepository.save(tracking);
+        // 7. Rate-limit location history storage: save only if moved > 15m or time elapsed > 30s
+        boolean shouldSaveHistory = true;
+        if (!history.isEmpty()) {
+            LocationTracking last = history.get(history.size() - 1);
+            double distMeters = matchingService.calculateDistance(last.getLatitude(), last.getLongitude(), latitude, longitude) * 1000.0;
+            long timeDiffSecs = java.time.Duration.between(last.getTimestamp(), updateTime).abs().getSeconds();
+            if (distMeters < 15.0 && timeDiffSecs < 30) {
+                shouldSaveHistory = false;
+            }
+        }
+
+        if (shouldSaveHistory) {
+            LocationTracking tracking = new LocationTracking(task, latitude, longitude);
+            tracking.setTimestamp(updateTime);
+            locationTrackingRepository.save(tracking);
+        }
 
         // Broadcast telemetry details
         String telemetryData = String.format(
