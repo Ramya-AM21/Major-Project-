@@ -1,3 +1,11 @@
+import sys
+import io
+
+# Force UTF-8 encoding for stdout/stderr to avoid Windows charmap encoding errors
+if sys.platform.startswith('win'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 import uvicorn
 from fastapi import FastAPI, Query, File, UploadFile, Form
 from pydantic import BaseModel
@@ -12,6 +20,178 @@ import requests
 import json
 import os
 import re
+import cv2
+from dotenv import load_dotenv
+
+load_dotenv()
+import sys
+import io
+import os
+
+from dotenv import load_dotenv
+
+# Load .env from the ai-service directory
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ENV_FILE = os.path.join(BASE_DIR, ".env")
+
+load_dotenv(ENV_FILE)
+
+print(
+    "[ENV] GEMINI_API_KEY:",
+    "LOADED" if os.getenv("GEMINI_API_KEY") else "NOT LOADED"
+)
+# Global EasyOCR Reader
+_easyocr_reader = None
+
+def get_easyocr_reader():
+    global _easyocr_reader
+    if _easyocr_reader is None:
+        import easyocr
+        import torch
+        use_gpu = torch.cuda.is_available()
+        print(f"[OCR] Initializing EasyOCR Reader (GPU={use_gpu})...")
+        _easyocr_reader = easyocr.Reader(['en'], gpu=use_gpu)
+    return _easyocr_reader
+
+def preprocess_image(image_bytes):
+    # Decode image bytes to OpenCV format
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        return None, "Invalid image format"
+
+    # Grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Contrast Enhancement (CLAHE)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+
+    # Denoising using Bilateral Filter to preserve sharp text edges
+    denoised = cv2.bilateralFilter(enhanced, 9, 75, 75)
+
+    return denoised, None
+
+def parse_ocr_text_to_food_details(raw_text):
+    lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+    
+    # Metadata headers/footers to skip
+    metadata_keywords = [
+        "total", "tax", "subtotal", "gst", "cgst", "sgst", "invoice", "bill", "date", "time",
+        "tel", "phone", "cashier", "receipt", "payment", "change", "cash", "card", "visa",
+        "mastercard", "table", "waiter", "guest", "pax", "order", "no.", "sr.", "sl.", "qty",
+        "amount", "price", "rate", "disc", "discount", "net amt", "round off", "balance",
+        "welcome", "thank you", "visit again", "merchant", "terminal", "auth", "signature",
+        "address", "street", "road", "city", "state", "pin", "code", "website", "email"
+    ]
+    
+    # Keywords indicating a food item is likely present
+    food_keywords = [
+        "rice", "biryani", "roti", "chapati", "curry", "dal", "sambar", "paneer", "chicken",
+        "veg", "salad", "soup", "pizza", "burger", "pasta", "thali", "meal", "naan", "sabji",
+        "sabzi", "gravy", "fry", "fish", "meat", "mutton", "egg", "noodle", "chole", "bhature",
+        "parotta", "paratha", "dosa", "idli", "vada", "upma", "pulao", "khichdi", "kofta",
+        "korma", "raita", "dessert", "sweet", "juice", "beverage", "drink", "coffee", "tea",
+        "water", "sandwich", "wrap", "roll", "taco", "burrito", "fries", "nuggets", "wing",
+        "kebab", "tikka", "tandoori", "manchurian", "momos", "samosa", "pakoda", "bhaji",
+        "paneer", "butter", "cheese", "bread", "milk", "curd", "yogurt"
+    ]
+
+    food_items = []
+    
+    for line in lines:
+        line_clean = line.strip()
+        line_lower = line_clean.lower()
+        
+        # Skip lines that are clearly metadata
+        if any(keyword in line_lower for keyword in metadata_keywords):
+            continue
+            
+        tokens = line_clean.split()
+        if not tokens:
+            continue
+            
+        item_qty = None
+        item_name_tokens = []
+        
+        for token in tokens:
+            # Check if token is numerical quantity or price
+            if token.replace('.', '', 1).isdigit():
+                val = float(token)
+                if val.is_integer() and 1 <= val <= 100:
+                    if item_qty is None:
+                        item_qty = int(val)
+            else:
+                item_name_tokens.append(token)
+                
+        item_name = " ".join(item_name_tokens).strip()
+        # Clean special chars
+        item_name = re.sub(r'[^a-zA-Z\s\-\&]', '', item_name).strip()
+        # Clean leading/trailing noise
+        item_name = re.sub(r'^[xX\@\-\s]+', '', item_name).strip()
+        item_name = re.sub(r'[xX\@\-\s]+$', '', item_name).strip()
+        item_name = re.sub(r'\s+', ' ', item_name).strip()
+        
+        if len(item_name) >= 3 and not any(kw in item_name.lower() for kw in metadata_keywords):
+            if not any(f["name"].lower() == item_name.lower() for f in food_items):
+                is_food = any(kw in item_name.lower() for kw in food_keywords)
+                # If it's a food keyword, or has a quantity, or is multi-word text, treat as candidate food
+                if is_food or item_qty is not None or len(item_name.split()) >= 2:
+                    food_items.append({
+                        "name": item_name,
+                        "quantity": item_qty
+                    })
+
+    # Extract suggested primary food name
+    suggested_food_name = ""
+    if food_items:
+        suggested_food_name = food_items[0]["name"]
+        
+    # Extract total quantity from text
+    suggested_quantity = None
+    qty_total_match = re.search(r'(?:total\s+)?(?:qty|quantity|meals|plates|pcs|pieces)\s*:?\s*([\d\.]+)', raw_text, re.IGNORECASE)
+    if qty_total_match:
+        try:
+            suggested_quantity = float(qty_total_match.group(1))
+        except ValueError:
+            pass
+            
+    # Fallback to sum of items if total is not found
+    if not suggested_quantity and food_items:
+        item_quantities = [f["quantity"] for f in food_items if f["quantity"] is not None]
+        if item_quantities:
+            suggested_quantity = float(sum(item_quantities))
+
+    # Classify category
+    suggested_category = "Vegetarian"
+    non_veg_keywords = ["chicken", "mutton", "fish", "meat", "non-veg", "beef", "pork", "prawn", "crab"]
+    egg_keywords = ["egg", "anda"]
+    
+    text_lower = raw_text.lower()
+    if any(kw in text_lower for kw in non_veg_keywords):
+        suggested_category = "Non-Vegetarian"
+    elif any(kw in text_lower for kw in egg_keywords):
+        suggested_category = "Egg"
+        
+    suggested_unit = "MEALS"
+    if "kg" in text_lower or "kilogram" in text_lower:
+        suggested_unit = "KG"
+        
+    allergen_list = []
+    allergen_keywords = ["nuts", "peanut", "dairy", "milk", "gluten", "wheat", "egg", "soy", "shellfish", "fish"]
+    for kw in allergen_keywords:
+        if kw in text_lower:
+            allergen_list.append(kw.capitalize())
+    suggested_allergens = ", ".join(allergen_list) if allergen_list else ""
+
+    return {
+        "foodItems": food_items,
+        "suggestedFoodName": suggested_food_name,
+        "suggestedQuantity": suggested_quantity,
+        "suggestedCategory": suggested_category,
+        "suggestedUnit": suggested_unit,
+        "suggestedAllergens": suggested_allergens
+    }
 
 app = FastAPI(title="Route-Based Food Waste Management AI Service", version="1.0.0")
 
@@ -190,29 +370,284 @@ async def validate_delivery_proof(
         "reason": "Delivery evidence matched target density metrics"
     }
 
+def build_food_ai_prompt(ocr_text: str):
+    return f"""
+You are the food-analysis AI for a food redistribution platform.
+
+The uploaded image will be a RECEIPT or INVOICE containing a list of food items.
+Analyze the image and the OCR text to extract all the food items listed on the receipt.
+
+OCR TEXT DETECTED FROM IMAGE:
+{ocr_text if ocr_text.strip() else "(No readable text detected)"}
+
+Your job is to identify the food visible in the image and return ONLY valid JSON.
+
+Return exactly this structure:
+
+{{
+  "food_name": "main food name",
+  "food_items": [
+    {{
+      "name": "food item",
+      "confidence": 0.95
+    }}
+  ],
+  "food_category": "Cooked Meal",
+  "food_type": "Vegetarian",
+  "description": "short description of visible food",
+  "estimated_quantity": null,
+  "estimated_servings": null,
+  "visible_packaging": null,
+  "visible_labels": [],
+  "possible_allergens": [],
+  "confidence": 0.90,
+  "warnings": []
+}}
+
+IMPORTANT RULES:
+
+1. The image is a receipt/invoice. Identify all food items listed in the receipt.
+2. Use the provided OCR text and your own vision capabilities to read the receipt.
+3. If multiple food items are present, include all of them in the `food_items` list.
+4. If a quantity is listed next to a food item on the receipt, include it or sum it up for `estimated_quantity`.
+5. Do NOT treat random non-food text (like tax, totals, GST, dates, prices) as a food name.
+6. Do NOT invent food items.
+7. Do NOT invent quantity or servings.
+8. estimated_quantity must be null unless quantity is actually visible or explicitly stated in the image/text.
+9. estimated_servings must be null unless servings can reasonably be determined from visible information.
+10. food_type must be one of:
+   - Vegetarian
+   - Non-Vegetarian
+   - Egg
+   - Unknown
+11. food_category should describe the food, such as:
+   - Cooked Meal
+   - Rice Dish
+   - Curry
+   - Bread
+   - Bakery
+   - Fruit
+   - Vegetables
+   - Packaged Food
+   - Beverage
+   - Dessert
+   - Other
+12. Extract visible package/brand/label/restaurant names when present.
+13. possible_allergens should contain only allergens reasonably associated with the identified food or explicitly visible.
+14. confidence must be between 0 and 1.
+15. If the receipt does not list any food items, return:
+   food_name = ""
+   food_items = []
+   confidence <= 0.20
+16. Return JSON only. No markdown. No explanation.
+"""
+
+
+def normalize_ai_food_response(ai_data, source):
+    food_items = ai_data.get("food_items", [])
+
+    if not isinstance(food_items, list):
+        food_items = []
+
+    normalized_items = []
+
+    for item in food_items:
+        if isinstance(item, dict):
+            name = str(item.get("name", "")).strip()
+
+            if not name:
+                continue
+
+            try:
+                confidence = float(item.get("confidence", 0.0))
+            except (TypeError, ValueError):
+                confidence = 0.0
+
+            normalized_items.append({
+                "name": name,
+                "confidence": round(max(0.0, min(1.0, confidence)), 2)
+            })
+
+    food_name = str(ai_data.get("food_name") or "").strip()
+
+    if not food_name and normalized_items:
+        food_name = normalized_items[0]["name"]
+
+    food_type = str(
+        ai_data.get("food_type") or "Unknown"
+    ).strip()
+
+    if food_type not in ["Vegetarian", "Non-Vegetarian", "Egg", "Unknown"]:
+        food_type = "Unknown"
+
+    try:
+        confidence = float(ai_data.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+
+    confidence = round(max(0.0, min(1.0, confidence)), 2)
+
+    extracted_details = {
+        "foodItems": [
+            {
+                "name": item["name"],
+                "quantity": None
+            }
+            for item in normalized_items
+        ],
+        "suggestedFoodName": food_name,
+        "suggestedQuantity": ai_data.get("estimated_quantity"),
+        "suggestedCategory": food_type
+    }
+
+    return {
+        "success": True,
+        "status": "SUCCESS",
+        "source": source,
+
+        "rawText": ai_data.get("description", ""),
+        "ocrStatus": "SUCCESS",
+
+        "extractedDetails": extracted_details,
+
+        # Spring Boot compatibility
+        "food_name": food_name,
+        "food_items": normalized_items,
+        "food_category": ai_data.get(
+            "food_category",
+            "Other"
+        ),
+        "food_type": food_type,
+        "description": ai_data.get(
+            "description",
+            ""
+        ),
+        "estimated_quantity": ai_data.get(
+            "estimated_quantity"
+        ),
+        "estimated_servings": ai_data.get(
+            "estimated_servings"
+        ),
+        "visible_packaging": ai_data.get(
+            "visible_packaging"
+        ),
+        "visible_labels": ai_data.get(
+            "visible_labels",
+            []
+        ),
+        "possible_allergens": ai_data.get(
+            "possible_allergens",
+            []
+        ),
+        "confidence": confidence,
+        "warnings": ai_data.get(
+            "warnings",
+            []
+        )
+    }
+
 
 @app.post("/api/v1/ai/analyze-food")
 async def analyze_food(image: UploadFile = File(...)):
+
+    print("\n========================================")
+    print("[FOOD AI] New image received")
+    print(f"[FOOD AI] Filename: {image.filename}")
+    print(f"[FOOD AI] Content-Type: {image.content_type}")
+    print("========================================")
+
     content = await image.read()
-    filename = image.filename.lower()
-    
+
+    if not content:
+        return {
+            "success": False,
+            "status": "FAILED",
+            "message": "Empty image received"
+        }
+
+    print(f"[FOOD AI] Image size: {len(content)} bytes")
+
+    # ---------------------------------------------------------
+    # STEP 1: OCR
+    # ---------------------------------------------------------
+
+    raw_ocr_text = ""
+
+    try:
+        preprocessed_img, prep_err = preprocess_image(content)
+
+        if prep_err or preprocessed_img is None:
+            print(
+                f"[OCR] Preprocessing failed: {prep_err}"
+            )
+        else:
+            reader = get_easyocr_reader()
+
+            ocr_results = reader.readtext(
+                preprocessed_img
+            )
+
+            raw_ocr_text = "\n".join(
+                [
+                    str(res[1])
+                    for res in ocr_results
+                    if len(res) > 1
+                ]
+            ).strip()
+
+            print(
+                f"[OCR] Extracted text: "
+                f"{raw_ocr_text[:500]}"
+            )
+
+    except Exception as e:
+        print(
+            f"[OCR] OCR failed: {e}"
+        )
+
+    # ---------------------------------------------------------
+    # STEP 2: GEMINI VISION
+    # ---------------------------------------------------------
+
     gemini_key = os.getenv("GEMINI_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    
-    # 0. Check Live AI Providers
+
     if gemini_key:
+
         try:
-            image_b64 = base64.b64encode(content).decode("utf-8")
-            mime_type = image.content_type or "image/jpeg"
-            
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
-            headers = {"Content-Type": "application/json"}
+
+            print(
+                "[AI] Sending image to Gemini Vision..."
+            )
+
+            image_b64 = base64.b64encode(
+                content
+            ).decode("utf-8")
+
+            mime_type = (
+                image.content_type
+                or "image/jpeg"
+            )
+
+            prompt = build_food_ai_prompt(
+                raw_ocr_text
+            )
+
+            url = (
+                "https://generativelanguage.googleapis.com/"
+                "v1beta/models/gemini-3.6-flash:generateContent"
+                f"?key={gemini_key}"
+            )
+
+            headers = {
+                "Content-Type": "application/json"
+            }
+
             payload = {
                 "contents": [
                     {
                         "parts": [
                             {
-                                "text": "You are a food identification assistant for a food redistribution platform.\nAnalyze the uploaded food image.\nIdentify only food items that are visibly present or reasonably identifiable.\n\nYou must return a valid JSON object matching the following structure:\n{\n  \"food_name\": \"Name of the main food or dishes visible\",\n  \"food_items\": [\n    {\n      \"name\": \"Single food item name (e.g. Rice, Dal, Salad)\",\n      \"confidence\": 0.95\n    }\n  ],\n  \"food_category\": \"e.g. Cooked Meal, Fresh Fruit, Vegetables, Bakery, Packaged Food\",\n  \"food_type\": \"Vegetarian or Non-Vegetarian or Egg\",\n  \"description\": \"Short description of the food items visible in the image\",\n  \"estimated_quantity\": null,\n  \"estimated_servings\": null,\n  \"visible_packaging\": null,\n  \"visible_labels\": [],\n  \"possible_allergens\": [],\n  \"confidence\": 0.88,\n  \"warnings\": []\n}\n\nRules:\n1. Identify visible food items.\n2. Identify the most likely food name.\n3. Identify food category when reasonably possible.\n4. Identify vegetarian/non-vegetarian status (e.g. Vegetarian, Non-Vegetarian, Egg) only when reasonably inferable.\n5. Extract visible labels or text from packaging when present.\n6. Do not invent quantity, servings, expiry time, preparation time, or other information that is not visible. If not visible, return null for estimated_quantity, estimated_servings, visible_packaging.\n7. If information cannot be determined, return null.\n8. Return confidence scores.\n9. If multiple foods are visible, return all reasonably identifiable foods.\n10. Keep the response valid JSON only. Do not wrap in markdown ```json blocks."
+                                "text": prompt
                             },
                             {
                                 "inlineData": {
@@ -224,324 +659,295 @@ async def analyze_food(image: UploadFile = File(...)):
                     }
                 ],
                 "generationConfig": {
+                    "temperature": 0.1,
                     "responseMimeType": "application/json"
                 }
             }
-            
-            response = requests.post(url, headers=headers, json=payload, timeout=15.0)
-            if response.status_code == 200:
+
+            response = requests.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+
+            print(
+                f"[AI] Gemini HTTP status: "
+                f"{response.status_code}"
+            )
+
+            if response.status_code != 200:
+
+                print(
+                    f"[AI] Gemini error: "
+                    f"{response.text[:1000]}"
+                )
+
+            else:
+
                 res_json = response.json()
-                text_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                text_response = text_response.strip()
-                if text_response.startswith("```json"):
-                    text_response = text_response[7:]
-                if text_response.endswith("```"):
-                    text_response = text_response[:-3]
-                text_response = text_response.strip()
-                
-                ai_data = json.loads(text_response)
-                ai_data["status"] = "SUCCESS"
-                ai_data["source"] = "Gemini Vision Model"
-                return ai_data
+
+                candidates = res_json.get(
+                    "candidates",
+                    []
+                )
+
+                if not candidates:
+                    raise Exception(
+                        "Gemini returned no candidates"
+                    )
+
+                parts = (
+                    candidates[0]
+                    .get("content", {})
+                    .get("parts", [])
+                )
+
+                if not parts:
+                    raise Exception(
+                        "Gemini returned no content parts"
+                    )
+
+                text_response = (
+                    parts[0]
+                    .get("text", "")
+                    .strip()
+                )
+
+                print(
+                    f"[AI] Gemini response: "
+                    f"{text_response[:1000]}"
+                )
+
+                # Remove accidental markdown fences
+                if text_response.startswith(
+                    "```json"
+                ):
+                    text_response = (
+                        text_response[7:]
+                    )
+
+                if text_response.startswith(
+                    "```"
+                ):
+                    text_response = (
+                        text_response[3:]
+                    )
+
+                if text_response.endswith(
+                    "```"
+                ):
+                    text_response = (
+                        text_response[:-3]
+                    )
+
+                text_response = (
+                    text_response.strip()
+                )
+
+                ai_data = json.loads(
+                    text_response
+                )
+
+                result = normalize_ai_food_response(
+                    ai_data,
+                    "Gemini Vision + EasyOCR"
+                )
+
+                # Preserve OCR text
+                result["rawText"] = raw_ocr_text
+
+                print(
+                    "[AI] Food identified: "
+                    f"{result['food_name']}"
+                )
+
+                print(
+                    "[AI] Food type: "
+                    f"{result['food_type']}"
+                )
+
+                print(
+                    "[AI] Food category: "
+                    f"{result['food_category']}"
+                )
+
+                print(
+                    "[AI] Confidence: "
+                    f"{result['confidence']}"
+                )
+
+                return result
+
+        except json.JSONDecodeError as e:
+
+            print(
+                f"[AI] Gemini JSON parsing failed: {e}"
+            )
+
         except Exception as e:
-            print(f"[AI] Gemini API error: {e}")
-            
-    elif openai_key:
+
+            print(
+                f"[AI] Gemini processing failed: {e}"
+            )
+
+    else:
+
+        print(
+            "[AI] GEMINI_API_KEY not configured"
+        )
+
+    # ---------------------------------------------------------
+    # STEP 3: OCR FALLBACK
+    # ---------------------------------------------------------
+
+    if raw_ocr_text:
+
+        print(
+            "[FALLBACK] Using EasyOCR parser"
+        )
+
         try:
-            image_b64 = base64.b64encode(content).decode("utf-8")
-            mime_type = image.content_type or "image/jpeg"
-            
-            url = "https://api.openai.com/v1/chat/completions"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {openai_key}"
-            }
-            payload = {
-                "model": "gpt-4o-mini",
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "You are a food identification assistant for a food redistribution platform.\nAnalyze the uploaded food image.\nIdentify only food items that are visibly present or reasonably identifiable.\n\nYou must return a valid JSON object matching the following structure:\n{\n  \"food_name\": \"Name of the main food or dishes visible\",\n  \"food_items\": [\n    {\n      \"name\": \"Single food item name (e.g. Rice, Dal, Salad)\",\n      \"confidence\": 0.95\n    }\n  ],\n  \"food_category\": \"e.g. Cooked Meal, Fresh Fruit, Vegetables, Bakery, Packaged Food\",\n  \"food_type\": \"Vegetarian or Non-Vegetarian or Egg\",\n  \"description\": \"Short description of the food items visible in the image\",\n  \"estimated_quantity\": null,\n  \"estimated_servings\": null,\n  \"visible_packaging\": null,\n  \"visible_labels\": [],\n  \"possible_allergens\": [],\n  \"confidence\": 0.88,\n  \"warnings\": []\n}\n\nRules:\n1. Identify visible food items.\n2. Identify the most likely food name.\n3. Identify food category when reasonably possible.\n4. Identify vegetarian/non-vegetarian status (e.g. Vegetarian, Non-Vegetarian, Egg) only when reasonably inferable.\n5. Extract visible labels or text from packaging when present.\n6. Do not invent quantity, servings, expiry time, preparation time, or other information that is not visible. If not visible, return null for estimated_quantity, estimated_servings, visible_packaging.\n7. If information cannot be determined, return null.\n8. Return confidence scores.\n9. If multiple foods are visible, return all reasonably identifiable foods.\n10. Keep the response valid JSON only."
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{mime_type};base64,{image_b64}"
-                                }
-                            }
+
+            extracted = (
+                parse_ocr_text_to_food_details(
+                    raw_ocr_text
+                )
+            )
+
+            food_name = (
+                extracted["suggestedFoodName"]
+            )
+
+            category = (
+                extracted["suggestedCategory"]
+            )
+
+            return {
+                "success": True,
+                "status": "SUCCESS",
+                "source": "EasyOCR + Parser",
+                "rawText": raw_ocr_text,
+                "ocrStatus": "SUCCESS",
+
+                "extractedDetails": {
+                    "foodItems": [
+                        {
+                            "name": f["name"],
+                            "quantity": (
+                                f"{f['quantity']} meals"
+                                if f["quantity"]
+                                else None
+                            )
+                        }
+                        for f in extracted["foodItems"]
+                    ],
+                    "suggestedFoodName": food_name,
+                    "suggestedQuantity": (
+                        extracted[
+                            "suggestedQuantity"
                         ]
+                    ),
+                    "suggestedCategory": category
+                },
+
+                "food_name": food_name,
+
+                "food_items": [
+                    {
+                        "name": f["name"],
+                        "confidence": 0.60
                     }
+                    for f in extracted["foodItems"]
+                ],
+
+                "food_category": category,
+                "food_type": category,
+
+                "description": (
+                    f"Cooked {food_name} "
+                    "ready for redistribution."
+                    if food_name
+                    else "Food identified from OCR text."
+                ),
+
+                "estimated_quantity": (
+                    extracted[
+                        "suggestedQuantity"
+                    ]
+                ),
+
+                "estimated_servings": None,
+                "visible_packaging": None,
+
+                "visible_labels": [
+                    f["name"]
+                    for f in extracted["foodItems"]
+                ],
+
+                "possible_allergens": [
+                    a.strip()
+                    for a in extracted[
+                        "suggestedAllergens"
+                    ].split(",")
+                    if a.strip()
+                ],
+
+                "confidence": 0.60,
+                "warnings": [
+                    "Food identified using OCR fallback."
                 ]
             }
-            
-            response = requests.post(url, headers=headers, json=payload, timeout=15.0)
-            if response.status_code == 200:
-                res_json = response.json()
-                text_response = res_json["choices"][0]["message"]["content"].strip()
-                ai_data = json.loads(text_response)
-                ai_data["status"] = "SUCCESS"
-                ai_data["source"] = "OpenAI Vision Model"
-                return ai_data
+
         except Exception as e:
-            print(f"[AI] OpenAI API error: {e}")
 
-    # Fallback simulation logic
-    food_name = ""
-    category = "VEG"
-    quantity = None
-    unit = "MEALS"
-    safe_consumption_hours = None
-    confidence = 0.0
-    status = "UNKNOWN"
-    
-    # 1. Filename keyword override
-    if "rice" in filename or "pulav" in filename or "pullyogare" in filename:
-        food_name = "Cooked Rice"
-        category = "VEG"
-        confidence = 0.91
-        status = "SUCCESS"
-    elif "biryani" in filename:
-        food_name = "Veg Biryani"
-        category = "VEG"
-        confidence = 0.89
-        status = "SUCCESS"
-        if "chicken" in filename:
-            food_name = "Chicken Biryani"
-            category = "NON_VEG"
-        elif "egg" in filename:
-            food_name = "Egg Biryani"
-            category = "EGG"
-    elif "curry" in filename or "dal" in filename or "sambar" in filename:
-        food_name = "Mixed Veg Curry"
-        category = "VEG"
-        confidence = 0.85
-        status = "SUCCESS"
-        if "chicken" in filename:
-            food_name = "Chicken Curry"
-            category = "NON_VEG"
-    elif "paneer" in filename:
-        food_name = "Paneer Tikka"
-        category = "VEG"
-        confidence = 0.93
-        status = "SUCCESS"
-    elif "roti" in filename or "chapati" in filename or "naan" in filename:
-        food_name = "Wheat Roti"
-        category = "VEG"
-        confidence = 0.94
-        status = "SUCCESS"
-        
-    # 2. OCR-based text extraction (for invoices, documents, receipts)
-    if status == "UNKNOWN":
-        parsed_text = ""
-        # Offline/Simulated OCR fallback if filename indicates a bill/invoice/receipt/proof/delivery
-        if any(keyword in filename for keyword in ["bill", "invoice", "receipt", "proof", "delivery"]):
-            parsed_text = """
-            Surplus Food Bill
-            -----------------
-            Product/Service: Mysore Veg Thali
-            Quantity: 45 meals
-            Category: Vegetarian
-            Safe Consumption: 4 hours
-            Allergens: Gluten, Dairy
-            Description: High quality pure veg thali.
-            """
-        else:
-            try:
-                response = requests.post(
-                    "https://api.ocr.space/parse/image",
-                    files={"file": (image.filename, content, image.content_type)},
-                    data={"apikey": "helloworld", "language": "eng"},
-                    timeout=5.0
-                )
-                if response.status_code == 200:
-                    res_data = response.json()
-                    if not res_data.get("IsErroredOnProcessing") and res_data.get("ParsedResults"):
-                        parsed_text = res_data["ParsedResults"][0].get("ParsedText", "")
-            except Exception:
-                pass
+            print(
+                f"[FALLBACK] OCR parsing failed: {e}"
+            )
 
-        if parsed_text and parsed_text.strip():
-            text_lower = parsed_text.lower()
-            lines = [line.strip() for line in parsed_text.split('\n') if line.strip()]
-            
-            for line in lines:
-                l_low = line.lower()
-                if "product/service" in l_low:
-                    food_name = line.split(":", 1)[1].strip() if ":" in line else line
-                    break
-                elif "product" in l_low and any(str(i) in l_low for i in range(10)):
-                    food_name = line.split(":", 1)[1].strip() if ":" in line else line
-                    break
-                elif any(f in l_low for f in ["curry", "rice", "biryani", "roti", "meals", "soup", "paneer"]):
-                    food_name = line
-                    break
-                                
-            if not food_name:
-                for line in lines:
-                    if "product" in line.lower() or "service" in line.lower():
-                        food_name = line
-                        break
-                        
-            if not food_name:
-                food_name = "Surplus Meals"
-                
-            if "chicken" in text_lower or "fish" in text_lower or "mutton" in text_lower or "meat" in text_lower:
-                category = "NON_VEG"
-            elif "egg" in text_lower:
-                category = "EGG"
-            else:
-                category = "VEG"
-                
-            qty_match = re.search(r'(?:qty|quantity|meals|meals count)\s*:?\s*([\d\.]+)', text_lower)
-            if qty_match:
-                try:
-                    quantity = float(qty_match.group(1))
-                except ValueError:
-                    pass
-            
-            if not quantity:
-                unit_match = re.search(r'([\d\.]+)\s*(?:kg|meals|meals count|quantity)', text_lower)
-                if unit_match:
-                    try:
-                        quantity = float(unit_match.group(1))
-                    except ValueError:
-                        pass
-                        
-            if not quantity:
-                for line in lines:
-                    if "qty" in line.lower() or "unit" in line.lower() or "sr." in line.lower():
-                        nums = re.findall(r'[\d\.]+', line)
-                        if nums:
-                            try:
-                                quantity = float(nums[0])
-                                break
-                            except ValueError:
-                                pass
-                                
-            if not quantity:
-                standalone_nums = []
-                for line in lines:
-                    cleaned_line = re.sub(r'[^\d\.]', '', line)
-                    if cleaned_line:
-                        try:
-                            val = float(cleaned_line)
-                            if 0.5 <= val < 100.0:
-                                standalone_nums.append(val)
-                        except ValueError:
-                            pass
-                if standalone_nums:
-                    quantity = standalone_nums[0]
-                                
-            if "kg" in text_lower:
-                unit = "KG"
-            else:
-                unit = "MEALS"
-                
-            duration_match = re.search(r'(\d+)\s*(?:hour|hours|hrs|hr|duration)', text_lower)
-            if duration_match:
-                try:
-                    safe_consumption_hours = int(duration_match.group(1))
-                except ValueError:
-                    pass
-            else:
-                for line in lines:
-                    if "hour" in line.lower() or "duration" in line.lower():
-                        nums = re.findall(r'\d+', line)
-                        if nums:
-                            safe_consumption_hours = int(nums[0])
-                            break
-                            
-            confidence = 0.95
-            status = "SUCCESS"
+    # ---------------------------------------------------------
+    # FINAL FAILURE
+    # ---------------------------------------------------------
 
-    # 3. Fallback to Colorfulness analysis (for pure food photos)
-    if status == "UNKNOWN":
-        try:
-            from PIL import Image
-            import io
-            
-            img = Image.open(io.BytesIO(content))
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
-            
-            img_small = img.resize((16, 16))
-            pixels = list(img_small.getdata())
-            
-            avg_r = sum(p[0] for p in pixels) / len(pixels)
-            avg_g = sum(p[1] for p in pixels) / len(pixels)
-            avg_b = sum(p[2] for p in pixels) / len(pixels)
-            
-            rg = [abs(p[0] - p[1]) for p in pixels]
-            yb = [abs(0.5 * (p[0] + p[1]) - p[2]) for p in pixels]
-            mean_rg = sum(rg) / len(rg)
-            mean_yb = sum(yb) / len(yb)
-            std_rg = (sum((x - mean_rg)**2 for x in rg) / len(rg))**0.5
-            std_yb = (sum((x - mean_yb)**2 for x in yb) / len(yb))**0.5
-            colorfulness = (std_rg**2 + std_yb**2)**0.5
-            
-            if colorfulness >= 10.0:
-                status = "SUCCESS"
-                confidence = round(0.70 + (colorfulness / 150.0), 2)
-                if confidence > 0.95:
-                    confidence = 0.95
-                
-                if avg_g > avg_r and avg_g > avg_b:
-                    food_name = "Mixed Veg Curry"
-                    category = "VEG"
-                elif avg_r > 190 and avg_g > 190 and avg_b > 190:
-                    food_name = "Cooked Rice"
-                    category = "VEG"
-                elif avg_r > avg_g and avg_r > avg_b:
-                    if avg_r - avg_g > 25:
-                        food_name = "Paneer Tikka"
-                        category = "VEG"
-                    else:
-                        food_name = "Veg Biryani"
-                        category = "VEG"
-                else:
-                    food_name = "Surplus Meals"
-                    category = "VEG"
-            else:
-                status = "UNKNOWN"
-        except Exception:
-            status = "UNKNOWN"
+    print(
+        "[FOOD AI] Unable to identify food."
+    )
 
-    # Map mock response properties to standard schema
-    food_name = food_name if food_name else "Surplus Food"
-    food_category_mapped = "Cooked Meal"
-    if category == "VEG":
-        food_type_mapped = "Vegetarian"
-    elif category == "NON_VEG":
-        food_type_mapped = "Non-Vegetarian"
-    elif category == "EGG":
-        food_type_mapped = "Egg"
-    else:
-        food_type_mapped = "Vegetarian"
-        
-    food_items_list = [{"name": food_name, "confidence": confidence}] if food_name else []
-    
     return {
-        "food_name": food_name,
-        "food_items": food_items_list,
-        "food_category": food_category_mapped,
-        "food_type": food_type_mapped,
-        "description": f"Cooked {food_name} ready for redistribution." if food_name else "Surplus food items",
-        "estimated_quantity": quantity if quantity else None,
-        "estimated_servings": safe_consumption_hours if safe_consumption_hours else None,
+        "success": False,
+        "status": "FAILED",
+        "source": "Food AI",
+        "rawText": raw_ocr_text,
+        "ocrStatus": "FAILED",
+
+        "extractedDetails": {
+            "foodItems": [],
+            "suggestedFoodName": "",
+            "suggestedQuantity": None,
+            "suggestedCategory": ""
+        },
+
+        "food_name": "",
+        "food_items": [],
+        "food_category": "",
+        "food_type": "Unknown",
+        "description": "",
+        "estimated_quantity": None,
+        "estimated_servings": None,
         "visible_packaging": None,
-        "visible_labels": [food_name] if food_name else [],
+        "visible_labels": [],
         "possible_allergens": [],
-        "confidence": confidence,
-        "warnings": [],
-        "status": status,
-        "source": "Mock AI Fallback Model"
+        "confidence": 0.0,
+
+        "warnings": [
+            "No recognizable food could be identified."
+        ],
+
+        "message": (
+            "Unable to reliably identify food "
+            "from the uploaded image."
+        )
     }
 
-
-
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, reload_dirs=["app"])
+    uvicorn.run(app, host="0.0.0.0", port=8002)

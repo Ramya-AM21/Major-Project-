@@ -353,6 +353,18 @@ public class FoodListingService {
         String aiFoodType = aiSuccess ? getAsString(aiResult, "food_type") : null;
         String aiDescription = aiSuccess ? getAsString(aiResult, "description") : null;
         
+        // Retrieve quantity and unit from AI/OCR result
+        String aiQuantity = null;
+        if (aiSuccess && aiResult.get("estimated_quantity") != null) {
+            aiQuantity = aiResult.get("estimated_quantity").toString();
+        }
+        String aiUnit = null;
+        if (aiSuccess && aiResult.get("unit") != null) {
+            aiUnit = aiResult.get("unit").toString();
+        } else if (aiSuccess && aiResult.get("estimated_unit") != null) {
+            aiUnit = aiResult.get("estimated_unit").toString();
+        }
+        
         // Category mapping: Cooked Meal / Fresh Fruit / Bakery etc. might be returned by AI
         // Wait, the frontend category dropdown supports VEG, NON_VEG, EGG.
         // How do we map AI category or food_type to the frontend VEG/NON_VEG/EGG?
@@ -392,8 +404,8 @@ public class FoodListingService {
         mergedFood.put("foodType", isNotEmpty(manualFoodType) ? manualFoodType : (aiSuccess && isNotEmpty(aiFoodType) ? aiFoodType : "Vegetarian"));
         mergedFood.put("description", isNotEmpty(manualDescription) ? manualDescription : (aiSuccess && isNotEmpty(aiDescription) ? aiDescription : ""));
         
-        mergedFood.put("quantity", isNotEmpty(manualQuantity) ? manualQuantity : "");
-        mergedFood.put("unit", isNotEmpty(manualUnit) ? manualUnit : "MEALS");
+        mergedFood.put("quantity", isNotEmpty(manualQuantity) ? manualQuantity : (aiSuccess && isNotEmpty(aiQuantity) ? aiQuantity : ""));
+        mergedFood.put("unit", isNotEmpty(manualUnit) ? manualUnit : (aiSuccess && isNotEmpty(aiUnit) ? aiUnit : "MEALS"));
         mergedFood.put("allergens", isNotEmpty(manualAllergens) ? manualAllergens : (aiSuccess && isNotEmpty(aiAllergens) ? aiAllergens : ""));
         mergedFood.put("safeConsumptionHours", isNotEmpty(manualSafeHours) ? manualSafeHours : "");
 
@@ -424,6 +436,8 @@ public class FoodListingService {
             }
             if (isNotEmpty(aiDescription)) fieldsDetected.add("description");
             if (isNotEmpty(aiAllergens)) fieldsDetected.add("allergens");
+            if (isNotEmpty(aiQuantity)) fieldsDetected.add("quantity");
+            if (isNotEmpty(aiUnit)) fieldsDetected.add("unit");
         }
         aiMeta.put("fieldsDetected", fieldsDetected);
         
@@ -436,6 +450,11 @@ public class FoodListingService {
         aiMeta.put("extractedData", extractedJsonStr);
         
         result.put("ai", aiMeta);
+        
+        if (aiSuccess && aiResult.get("extractedDetails") != null) {
+            result.put("extractedDetails", aiResult.get("extractedDetails"));
+        }
+        
         return result;
     }
 

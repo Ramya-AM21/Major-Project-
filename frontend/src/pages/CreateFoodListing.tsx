@@ -13,6 +13,11 @@ export const CreateFoodListing: React.FC = () => {
   const [entryMethod, setEntryMethod] = useState<'MANUAL' | 'AI_ASSISTED' | null>(null);
   const [step, setStep] = useState<number>(0); // 0: choice screen, 1: photo upload, 2: edit/review form
 
+  // OCR tracking states
+  const [detectedFoodItems, setDetectedFoodItems] = useState<{ name: string; quantity: string | null }[]>([]);
+  const [loadingStage, setLoadingStage] = useState<'UPLOADING' | 'EXTRACTING' | 'IDENTIFYING' | null>(null);
+  const [ocrFailed, setOcrFailed] = useState(false);
+
   // Photo States
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
@@ -167,6 +172,8 @@ export const CreateFoodListing: React.FC = () => {
   const handleAnalyzeFood = async () => {
     if (!selectedFile) return;
     setAnalyzing(true);
+    setLoadingStage('UPLOADING');
+    setOcrFailed(false);
     setAiError(null);
     setError(null);
 
@@ -189,6 +196,19 @@ export const CreateFoodListing: React.FC = () => {
       const res = await axios.post('/api/provider/food/analyze-image', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
+        },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+          if (percentCompleted === 100) {
+            setLoadingStage('EXTRACTING');
+            // Transition to IDENTIFYING after 2 seconds
+            setTimeout(() => {
+              setLoadingStage((current) => {
+                if (current === 'EXTRACTING') return 'IDENTIFYING';
+                return current;
+              });
+            }, 2000);
+          }
         }
       });
 
@@ -205,36 +225,39 @@ export const CreateFoodListing: React.FC = () => {
 
         if (f.foodName) {
           setFoodName(f.foodName);
-          if (!foodName) newSuggested.foodName = true;
+          newSuggested.foodName = true;
         }
         if (f.category) {
           const cat = f.category === 'NON_ZEG' ? 'NON_VEG' : f.category;
           setCategory(cat as any);
-          if (!category || category === 'VEG') newSuggested.category = true;
+          newSuggested.category = true;
         }
         if (f.foodType) {
           setFoodType(f.foodType);
-          if (!foodType) newSuggested.foodType = true;
+          newSuggested.foodType = true;
         }
         if (f.description) {
           setDescription(f.description);
-          if (!description) newSuggested.description = true;
+          newSuggested.description = true;
         }
         if (f.quantity !== undefined && f.quantity !== null && f.quantity !== '') {
-          setQuantity(Number(f.quantity));
-          if (!quantity) newSuggested.quantity = true;
+          const parsedQty = parseInt(String(f.quantity).replace(/[^\d]/g, ''), 10);
+          if (!isNaN(parsedQty)) {
+            setQuantity(parsedQty);
+            newSuggested.quantity = true;
+          }
         }
         if (f.unit) {
           setUnit(f.unit as 'MEALS' | 'KG');
-          if (!unit || unit === 'MEALS') newSuggested.unit = true;
+          newSuggested.unit = true;
         }
         if (f.allergens) {
           setAllergens(f.allergens);
-          if (!allergens) newSuggested.allergens = true;
+          newSuggested.allergens = true;
         }
         if (f.safeConsumptionHours !== undefined && f.safeConsumptionHours !== null && f.safeConsumptionHours !== '') {
           setSafeConsumptionHrs(Number(f.safeConsumptionHours));
-          if (!safeConsumptionHrs) newSuggested.safeConsumptionHours = true;
+          newSuggested.safeConsumptionHours = true;
         }
         
         setAiSuggestedFields(newSuggested);
@@ -247,17 +270,24 @@ export const CreateFoodListing: React.FC = () => {
         setAiDetected(true);
         setAiSource(data.source);
         
+        // Extract multiple food items
+        if (data.extractedDetails && data.extractedDetails.foodItems) {
+          setDetectedFoodItems(data.extractedDetails.foodItems);
+        } else if (f.foodName) {
+          setDetectedFoodItems([{ name: f.foodName, quantity: f.quantity ? String(f.quantity) : null }]);
+        }
+        
         // Show confirmation screen
         setShowConfirmation(true);
       } else {
-        setAiError("We could not confidently identify the food. You can enter the details manually.");
-        setStep(2); // Let provider proceed manually
+        setOcrFailed(true);
       }
     } catch (err: any) {
-      setAiError("We could not confidently identify the food. You can enter the details manually.");
-      setStep(2); // Let provider proceed manually
+      console.error("[OCR] Analysis error", err);
+      setOcrFailed(true);
     } finally {
       setAnalyzing(false);
+      setLoadingStage(null);
     }
   };
 
@@ -290,6 +320,20 @@ export const CreateFoodListing: React.FC = () => {
     try {
       const prepDate = new Date(prepTime);
 
+      // Re-serialize with updated items list
+      let updatedExtractedData = aiExtractedData;
+      try {
+        if (aiExtractedData) {
+          const parsed = JSON.parse(aiExtractedData);
+          parsed.foodItems = detectedFoodItems;
+          updatedExtractedData = JSON.stringify(parsed);
+        } else if (detectedFoodItems.length > 0) {
+          updatedExtractedData = JSON.stringify({ foodItems: detectedFoodItems });
+        }
+      } catch (e) {
+        console.error("Failed to update extracted details JSON", e);
+      }
+
       const payload = {
         foodName,
         category,
@@ -313,7 +357,7 @@ export const CreateFoodListing: React.FC = () => {
         foodType,
         aiDetected,
         aiConfidence,
-        aiExtractedData,
+        aiExtractedData: updatedExtractedData,
         providerConfirmed: entryMethod === 'AI_ASSISTED',
         aiSource
       };
@@ -439,47 +483,96 @@ export const CreateFoodListing: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="relative aspect-video rounded-xl overflow-hidden border border-natural-border">
-                <img
-                  src={imagePreviewUrl}
-                  alt="Food listing preview"
-                  className="w-full h-full object-cover"
-                />
-              </div>
+              {ocrFailed ? (
+                <div className="space-y-4 text-center">
+                  <div className="relative aspect-video rounded-xl overflow-hidden border border-natural-border opacity-50">
+                    <img
+                      src={imagePreviewUrl}
+                      alt="Food listing preview"
+                      className="w-full h-full object-cover grayscale"
+                    />
+                  </div>
+                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex flex-col items-center justify-center space-y-2">
+                    <AlertCircle className="w-5 h-5 text-orange-650" />
+                    <p className="text-xs font-semibold text-orange-700">
+                      We couldn't reliably extract the food details from this image.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOcrFailed(false);
+                        handleRemovePhoto();
+                      }}
+                      className="w-full btn-primary py-2 text-xs font-bold uppercase tracking-wider"
+                    >
+                      Try Another Image
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOcrFailed(false);
+                        setEntryMethod('MANUAL');
+                        setStep(2);
+                      }}
+                      className="w-full btn-secondary py-2 text-xs font-bold uppercase tracking-wider"
+                    >
+                      Enter Details Manually
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="relative aspect-video rounded-xl overflow-hidden border border-natural-border">
+                    <img
+                      src={imagePreviewUrl}
+                      alt="Food listing preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
 
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={handleRemovePhoto}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 border border-red-200 text-red-650 hover:bg-red-50 text-[10px] font-bold uppercase rounded-lg tracking-wider transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Remove
-                </button>
-                <label className="inline-flex items-center gap-1.5 px-4 py-2 border border-natural-border text-natural-text hover:bg-natural-hover text-[10px] font-bold uppercase rounded-lg tracking-wider cursor-pointer transition-colors">
-                  <RefreshCw className="w-3.5 h-3.5" /> Retake
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    className="hidden"
-                  />
-                </label>
-              </div>
+                  {!analyzing && (
+                    <div className="flex gap-3 justify-center">
+                      <button
+                        onClick={handleRemovePhoto}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 border border-red-200 text-red-650 hover:bg-red-50 text-[10px] font-bold uppercase rounded-lg tracking-wider transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Remove
+                      </button>
+                      <label className="inline-flex items-center gap-1.5 px-4 py-2 border border-natural-border text-natural-text hover:bg-natural-hover text-[10px] font-bold uppercase rounded-lg tracking-wider cursor-pointer transition-colors">
+                        <RefreshCw className="w-3.5 h-3.5" /> Retake
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
 
-              <button
-                onClick={handleAnalyzeFood}
-                disabled={analyzing}
-                className="w-full btn-primary flex justify-center items-center gap-2 mt-4"
-              >
-                {analyzing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Analyzing Image...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" /> Analyze Food Details
-                  </>
-                )}
-              </button>
+                  {analyzing ? (
+                    <div className="w-full p-6 bg-brand-50/20 border border-brand-100 rounded-xl flex flex-col items-center justify-center space-y-3 mt-4 text-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-brand-650" />
+                      <div className="text-xs font-bold text-natural-text uppercase tracking-wider animate-pulse">
+                        {loadingStage === 'UPLOADING' && 'Uploading document...'}
+                        {loadingStage === 'EXTRACTING' && 'Extracting text...'}
+                        {loadingStage === 'IDENTIFYING' && 'Identifying food details...'}
+                      </div>
+                      <p className="text-[10px] text-natural-muted font-semibold">Please wait while the real local OCR pipeline runs.</p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleAnalyzeFood}
+                      disabled={analyzing}
+                      className="w-full btn-primary flex justify-center items-center gap-2 mt-4"
+                    >
+                      <Sparkles className="w-4 h-4" /> Analyze Food Details
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -636,7 +729,7 @@ export const CreateFoodListing: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Food Description Name</label>
                   {entryMethod === 'AI_ASSISTED' && aiSuggestedFields.foodName && (
-                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">AI Suggested</span>
+                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Extracted from uploaded document</span>
                   )}
                 </div>
                 <input
@@ -658,7 +751,7 @@ export const CreateFoodListing: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Category Class</label>
                   {entryMethod === 'AI_ASSISTED' && aiSuggestedFields.category && (
-                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">AI Suggested</span>
+                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Extracted from uploaded document</span>
                   )}
                 </div>
                 <select
@@ -683,7 +776,7 @@ export const CreateFoodListing: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Food Type</label>
                   {entryMethod === 'AI_ASSISTED' && aiSuggestedFields.foodType && (
-                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">AI Suggested</span>
+                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Extracted from uploaded document</span>
                   )}
                 </div>
                 <input
@@ -704,7 +797,7 @@ export const CreateFoodListing: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Description</label>
                   {entryMethod === 'AI_ASSISTED' && aiSuggestedFields.description && (
-                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">AI Suggested</span>
+                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Extracted from uploaded document</span>
                   )}
                 </div>
                 <input
@@ -722,12 +815,100 @@ export const CreateFoodListing: React.FC = () => {
               </div>
             </div>
 
+            {/* Detected Food Items Section */}
+            {entryMethod === 'AI_ASSISTED' && detectedFoodItems.length > 0 && (
+              <div className="space-y-2 p-4 bg-brand-50/10 border border-brand-100 rounded-xl">
+                <div className="flex items-center gap-1.5">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">
+                    Detected Food Items ({detectedFoodItems.length})
+                  </label>
+                  <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Extracted from uploaded document</span>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {detectedFoodItems.map((item, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-semibold transition-all ${
+                        foodName === item.name 
+                          ? 'bg-brand-50 border-brand-300 text-brand-700' 
+                          : 'bg-white border-gray-250 text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      <span 
+                        onClick={() => setFoodName(item.name)} 
+                        className="cursor-pointer hover:underline"
+                        title="Click to set as main Food Description Name"
+                      >
+                        {item.name} {item.quantity ? `(${item.quantity})` : ''}
+                      </span>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          const newName = prompt("Edit item name:", item.name);
+                          if (newName && newName.trim()) {
+                            const trimmed = newName.trim();
+                            setDetectedFoodItems(prev => prev.map((f, i) => i === idx ? { ...f, name: trimmed } : f));
+                            if (foodName === item.name) {
+                              setFoodName(trimmed);
+                            }
+                          }
+                        }}
+                        className="text-gray-400 hover:text-brand-600 font-bold ml-1"
+                        title="Edit item name"
+                      >
+                        ✎
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => {
+                          setDetectedFoodItems(prev => prev.filter((_, i) => i !== idx));
+                          if (foodName === item.name) {
+                            setFoodName("");
+                          }
+                        }}
+                        className="text-gray-450 hover:text-red-500 font-bold ml-1.5"
+                        title="Remove item"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-3 pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const name = prompt("Add custom food item:");
+                      if (name && name.trim()) {
+                        setDetectedFoodItems(prev => [...prev, { name: name.trim(), quantity: null }]);
+                      }
+                    }}
+                    className="text-[10px] text-brand-655 hover:text-brand-855 font-bold uppercase tracking-wider"
+                  >
+                    + Add Item
+                  </button>
+                  {detectedFoodItems.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const merged = detectedFoodItems.map(item => item.name).join(", ");
+                        setFoodName(merged);
+                      }}
+                      className="text-[10px] text-brand-655 hover:text-brand-855 font-bold uppercase tracking-wider ml-auto"
+                    >
+                      Merge all to description name
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <div className="flex items-center gap-1.5">
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Meals Count Quantity</label>
                   {entryMethod === 'AI_ASSISTED' && aiSuggestedFields.quantity && (
-                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">AI Suggested</span>
+                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Extracted from uploaded document</span>
                   )}
                 </div>
                 <input
@@ -750,7 +931,7 @@ export const CreateFoodListing: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Counting Unit</label>
                   {entryMethod === 'AI_ASSISTED' && aiSuggestedFields.unit && (
-                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">AI Suggested</span>
+                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Extracted from uploaded document</span>
                   )}
                 </div>
                 <select
@@ -813,7 +994,7 @@ export const CreateFoodListing: React.FC = () => {
                 <div className="flex items-center gap-1.5">
                   <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Safe Consumption Window (Hours)</label>
                   {entryMethod === 'AI_ASSISTED' && aiSuggestedFields.safeConsumptionHours && (
-                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">AI Suggested</span>
+                    <span className="text-[8px] bg-brand-50 text-brand-700 border border-brand-100 px-1.5 py-0.5 rounded font-black uppercase tracking-wider">Extracted from uploaded document</span>
                   )}
                 </div>
                 <input
