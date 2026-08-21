@@ -16,7 +16,7 @@ export const CreateFoodListing: React.FC = () => {
   // OCR tracking states
   const [detectedFoodItems, setDetectedFoodItems] = useState<{ name: string; quantity: string | null }[]>([]);
   const [loadingStage, setLoadingStage] = useState<'UPLOADING' | 'EXTRACTING' | 'IDENTIFYING' | null>(null);
-  const [ocrFailed, setOcrFailed] = useState(false);
+  const [ocrFailed, setOcrFailed] = useState<boolean | string>(false);
 
   // Photo States
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -146,6 +146,22 @@ export const CreateFoodListing: React.FC = () => {
     }
   }, [latitude, longitude, zones]);
 
+  // DEBUG: Verify state after AI mapping
+  useEffect(() => {
+    console.log("========== STATE AFTER AI MAPPING ==========");
+    console.log({
+      foodName,
+      category,
+      foodType,
+      description,
+      quantity,
+      unit,
+      allergens,
+      safeConsumptionHrs,
+    });
+    console.log("=============================================");
+  }, [foodName, category, foodType, description, quantity, unit, allergens, safeConsumptionHrs]);
+
   const handleLocationSelect = (lat: number, lng: number) => {
     setLatitude(lat);
     setLongitude(lng);
@@ -216,7 +232,7 @@ export const CreateFoodListing: React.FC = () => {
       // ============================================================
       // FULL RESPONSE LOGGING — check browser console after upload
       // ============================================================
-      console.log("========== FOOD AI RAW RESPONSE ==========");
+      console.log("========== FOOD AI RAW RESPONSE ===========");
       console.log(data);
       console.log("success:", data.success);
       console.log("food object:", data.food);
@@ -228,7 +244,7 @@ export const CreateFoodListing: React.FC = () => {
         setImageUrl(data.imageUrl);
       }
 
-      if (data.success && data.food) {
+      if (data && data.food) {
         const f = data.food;
 
         console.log("========== MAPPED AI FOOD FIELDS ==========");
@@ -306,6 +322,14 @@ export const CreateFoodListing: React.FC = () => {
           setAiExtractedData(data.ai.extractedData);
         }
         setAiDetected(true);
+        
+        if (data.success === false) {
+            setAiError("We couldn't automatically extract all details. You can still enter the food information manually.");
+        } else {
+            setAiError(null);
+        }
+
+
         setAiSource(data.source);
 
         // Extract multiple food items — FastAPI food_items forwarded as extractedDetails.foodItems
@@ -324,12 +348,13 @@ export const CreateFoodListing: React.FC = () => {
         setShowConfirmation(true);
       } else {
         console.warn("AI returned success=false or no food object. Full response:", data);
-        setOcrFailed(true);
+        setOcrFailed(`Failed. Data received: ${JSON.stringify(data).substring(0, 150)}`);
       }
     } catch (err: any) {
       console.error("[OCR] Analysis error", err);
       console.error("[OCR] Error response:", err?.response?.data);
-      setOcrFailed(true);
+      const msg = err?.response?.data?.message || err?.message || "Unknown error";
+      setOcrFailed(`Error: ${msg}`);
     } finally {
       setAnalyzing(false);
       setLoadingStage(null);
@@ -482,7 +507,7 @@ export const CreateFoodListing: React.FC = () => {
   }
 
   // STEP 1: AI Photo Upload / Capture Interface
-  if (entryMethod === 'AI_ASSISTED' && step === 1) {
+  if (entryMethod === 'AI_ASSISTED' && step === 1 && !showConfirmation) {
     return (
       <div className="max-w-md mx-auto space-y-6">
         <div className="flex items-center text-left">
@@ -541,7 +566,7 @@ export const CreateFoodListing: React.FC = () => {
                   <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex flex-col items-center justify-center space-y-2">
                     <AlertCircle className="w-5 h-5 text-orange-650" />
                     <p className="text-xs font-semibold text-orange-700">
-                      We couldn't reliably extract the food details from this image.
+                      {typeof ocrFailed === 'string' ? ocrFailed : "We couldn't reliably extract the food details from this image."}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -553,7 +578,7 @@ export const CreateFoodListing: React.FC = () => {
                       }}
                       className="w-full btn-primary py-2 text-xs font-bold uppercase tracking-wider"
                     >
-                      Try Another Image
+                      Try Another Image (Updated)
                     </button>
                     <button
                       type="button"
