@@ -201,7 +201,6 @@ export const CreateFoodListing: React.FC = () => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
           if (percentCompleted === 100) {
             setLoadingStage('EXTRACTING');
-            // Transition to IDENTIFYING after 2 seconds
             setTimeout(() => {
               setLoadingStage((current) => {
                 if (current === 'EXTRACTING') return 'IDENTIFYING';
@@ -213,33 +212,62 @@ export const CreateFoodListing: React.FC = () => {
       });
 
       const data = res.data;
+
+      // ============================================================
+      // FULL RESPONSE LOGGING — check browser console after upload
+      // ============================================================
+      console.log("========== FOOD AI RAW RESPONSE ==========");
+      console.log(data);
+      console.log("success:", data.success);
+      console.log("food object:", data.food);
+      console.log("extractedDetails:", data.extractedDetails);
+      console.log("ai meta:", data.ai);
+      console.log("==========================================");
+
       if (data.imageUrl) {
         setImageUrl(data.imageUrl);
       }
 
       if (data.success && data.food) {
         const f = data.food;
-        
-        // Populate fields and set AI suggestion indicators
+
+        console.log("========== MAPPED AI FOOD FIELDS ==========");
+        console.log("foodName:", f.foodName);
+        console.log("category:", f.category);
+        console.log("foodType:", f.foodType);
+        console.log("description:", f.description);
+        console.log("quantity:", f.quantity);
+        console.log("unit:", f.unit);
+        console.log("allergens:", f.allergens);
+        console.log("estimatedServings:", f.estimatedServings);
+        console.log("===========================================");
+
         const newSuggested: any = {};
 
+        // FIX: Always set AI value if it exists — remove !foodName guard only for empty check
         if (f.foodName) {
           setFoodName(f.foodName);
           newSuggested.foodName = true;
         }
+
+        // FIX: Remove !category guard — category always has default 'VEG' so guard always blocks it
         if (f.category) {
           const cat = f.category === 'NON_ZEG' ? 'NON_VEG' : f.category;
           setCategory(cat as any);
           newSuggested.category = true;
         }
+
+        // FIX: Remove !foodType guard — foodType always has default 'Vegetarian' so guard always blocks it
         if (f.foodType) {
           setFoodType(f.foodType);
           newSuggested.foodType = true;
         }
+
         if (f.description) {
           setDescription(f.description);
           newSuggested.description = true;
         }
+
         if (f.quantity !== undefined && f.quantity !== null && f.quantity !== '') {
           const parsedQty = parseInt(String(f.quantity).replace(/[^\d]/g, ''), 10);
           if (!isNaN(parsedQty)) {
@@ -247,19 +275,29 @@ export const CreateFoodListing: React.FC = () => {
             newSuggested.quantity = true;
           }
         }
-        if (f.unit) {
+
+        // FIX: Remove !unit guard — unit always has default 'MEALS' so guard always blocks it
+        if (f.unit && (f.unit === 'MEALS' || f.unit === 'KG')) {
           setUnit(f.unit as 'MEALS' | 'KG');
           newSuggested.unit = true;
         }
+
+        // FIX: allergens may be array from backend — join to string
         if (f.allergens) {
-          setAllergens(f.allergens);
-          newSuggested.allergens = true;
+          const allergensStr = Array.isArray(f.allergens)
+            ? f.allergens.join(', ')
+            : String(f.allergens);
+          if (allergensStr.trim()) {
+            setAllergens(allergensStr);
+            newSuggested.allergens = true;
+          }
         }
+
         if (f.safeConsumptionHours !== undefined && f.safeConsumptionHours !== null && f.safeConsumptionHours !== '') {
           setSafeConsumptionHrs(Number(f.safeConsumptionHours));
           newSuggested.safeConsumptionHours = true;
         }
-        
+
         setAiSuggestedFields(newSuggested);
 
         // Store AI metadata
@@ -269,27 +307,35 @@ export const CreateFoodListing: React.FC = () => {
         }
         setAiDetected(true);
         setAiSource(data.source);
-        
-        // Extract multiple food items
-        if (data.extractedDetails && data.extractedDetails.foodItems) {
-          setDetectedFoodItems(data.extractedDetails.foodItems);
+
+        // Extract multiple food items — FastAPI food_items forwarded as extractedDetails.foodItems
+        if (data.extractedDetails && data.extractedDetails.foodItems && Array.isArray(data.extractedDetails.foodItems)) {
+          const items = data.extractedDetails.foodItems.map((item: any) => ({
+            name: typeof item === 'string' ? item : (item.name || ''),
+            quantity: item.quantity ?? null
+          })).filter((item: any) => item.name);
+          setDetectedFoodItems(items);
+          console.log("Detected food items set:", items);
         } else if (f.foodName) {
           setDetectedFoodItems([{ name: f.foodName, quantity: f.quantity ? String(f.quantity) : null }]);
         }
-        
+
         // Show confirmation screen
         setShowConfirmation(true);
       } else {
+        console.warn("AI returned success=false or no food object. Full response:", data);
         setOcrFailed(true);
       }
     } catch (err: any) {
       console.error("[OCR] Analysis error", err);
+      console.error("[OCR] Error response:", err?.response?.data);
       setOcrFailed(true);
     } finally {
       setAnalyzing(false);
       setLoadingStage(null);
     }
   };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -583,44 +629,82 @@ export const CreateFoodListing: React.FC = () => {
   // AI Confirmation screen
   if (entryMethod === 'AI_ASSISTED' && showConfirmation) {
     return (
-      <div className="max-w-md mx-auto space-y-6">
-        <div className="bg-white border border-natural-border rounded-2xl shadow-xs p-6 text-center space-y-6">
+      <div className="max-w-lg mx-auto space-y-6">
+        <div className="bg-white border border-natural-border rounded-2xl shadow-xs p-6 space-y-5">
           <div className="text-left border-b border-natural-border pb-4">
             <h3 className="font-display font-black text-natural-text tracking-tight uppercase flex items-center gap-1.5">
               <Sparkles className="w-5 h-5 text-brand-550" /> AI Detection Results
             </h3>
-            <p className="text-xs text-natural-muted mt-1 font-semibold">The AI has analyzed your food photo.</p>
+            <p className="text-xs text-natural-muted mt-1 font-semibold">
+              Review the extracted food data below, then continue to edit the full form.
+            </p>
+            {aiConfidence !== null && (
+              <span className="inline-block mt-2 text-[9px] font-bold bg-brand-50 text-brand-700 border border-brand-100 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                AI Confidence: {(aiConfidence * 100).toFixed(0)}% · {aiSource}
+              </span>
+            )}
           </div>
 
-          <div className="space-y-4 text-left">
-            <div className="p-4 bg-brand-50/20 border border-brand-100 rounded-xl space-y-2 text-xs font-semibold">
-              <div className="flex justify-between">
-                <span className="text-natural-muted">Suggested Food Name:</span>
-                <span className="font-bold text-natural-text">{foodName || "Not detected"}</span>
+          <div className="space-y-3 text-left">
+            {/* Food Name */}
+            <div className="p-3 bg-brand-50/20 border border-brand-100 rounded-xl space-y-2 text-xs font-semibold">
+              <div className="flex justify-between items-start gap-4">
+                <span className="text-natural-muted shrink-0">Food Name:</span>
+                <span className="font-bold text-natural-text text-right">{foodName || 'Not detected'}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-natural-muted">Suggested Food Type:</span>
-                <span className="font-bold text-natural-text">{foodType || "Not detected"}</span>
+              <div className="flex justify-between items-start gap-4">
+                <span className="text-natural-muted shrink-0">Food Type:</span>
+                <span className="font-bold text-natural-text">{foodType || 'Not detected'}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-natural-muted">Suggested Category:</span>
-                <span className="font-bold text-natural-text">{category || "Not detected"}</span>
+              <div className="flex justify-between items-start gap-4">
+                <span className="text-natural-muted shrink-0">Category:</span>
+                <span className="font-bold text-natural-text">{category || 'Not detected'}</span>
               </div>
-              {description && (
-                <div className="flex flex-col border-t border-brand-100/50 pt-2 mt-2">
-                  <span className="text-natural-muted">Description:</span>
-                  <span className="font-normal text-natural-text mt-1">{description}</span>
+              {quantity !== '' && (
+                <div className="flex justify-between items-start gap-4">
+                  <span className="text-natural-muted shrink-0">Estimated Quantity:</span>
+                  <span className="font-bold text-natural-text">{quantity} {unit}</span>
                 </div>
               )}
-              {aiConfidence !== null && (
-                <div className="flex justify-between border-t border-brand-100/50 pt-2 mt-2">
-                  <span className="text-natural-muted">AI Confidence:</span>
-                  <span className="font-bold text-brand-700">{(aiConfidence * 100).toFixed(0)}%</span>
+              {allergens && (
+                <div className="flex justify-between items-start gap-4">
+                  <span className="text-natural-muted shrink-0">Allergens:</span>
+                  <span className="font-bold text-natural-text text-right">{allergens}</span>
+                </div>
+              )}
+              {description && (
+                <div className="flex flex-col border-t border-brand-100/50 pt-2 mt-2 gap-1">
+                  <span className="text-natural-muted">Description:</span>
+                  <span className="font-normal text-natural-text leading-relaxed">{description}</span>
                 </div>
               )}
             </div>
 
-            <div className="flex flex-col gap-2.5">
+            {/* Food Items List */}
+            {detectedFoodItems.length > 0 && (
+              <div className="p-3 border border-natural-border rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-natural-muted">
+                    Detected Food Items
+                  </span>
+                  <span className="text-[9px] font-bold bg-brand-50 text-brand-700 border border-brand-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    {detectedFoodItems.length} items
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {detectedFoodItems.map((item, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center px-2.5 py-1 rounded-lg bg-brand-50 border border-brand-100 text-xs font-semibold text-brand-800"
+                    >
+                      {item.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2.5 pt-1">
               <button
                 onClick={() => {
                   setShowConfirmation(false);
@@ -628,7 +712,7 @@ export const CreateFoodListing: React.FC = () => {
                 }}
                 className="w-full btn-primary py-2.5 text-xs font-bold"
               >
-                Accept & Continue
+                Accept & Continue to Full Form
               </button>
               <button
                 onClick={() => {
@@ -637,7 +721,7 @@ export const CreateFoodListing: React.FC = () => {
                 }}
                 className="w-full btn-secondary py-2.5 text-xs font-bold"
               >
-                Edit Details
+                Edit / Review Details
               </button>
             </div>
           </div>
@@ -645,6 +729,7 @@ export const CreateFoodListing: React.FC = () => {
       </div>
     );
   }
+
 
   // STEP 2: Fill Form (Common for Manual and Review AI Suggestions)
   return (

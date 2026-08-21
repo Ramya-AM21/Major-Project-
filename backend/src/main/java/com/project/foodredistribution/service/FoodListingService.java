@@ -335,7 +335,12 @@ public class FoodListingService {
         java.util.Map<String, Object> mergedFood = new java.util.HashMap<>();
         
         // 1. Determine if AI analysis was successful
-        boolean aiSuccess = aiResult != null && "SUCCESS".equals(aiResult.get("status"));
+        boolean aiSuccess = false;
+        if (aiResult != null) {
+            Object successObj = aiResult.get("success");
+            Object statusObj = aiResult.get("status");
+            aiSuccess = (Boolean.TRUE.equals(successObj)) || "SUCCESS".equals(statusObj);
+        }
         
         // Helper to extract manual field
         String manualFoodName = getAsString(manualDetails, "foodName");
@@ -364,10 +369,14 @@ public class FoodListingService {
         } else if (aiSuccess && aiResult.get("estimated_unit") != null) {
             aiUnit = aiResult.get("estimated_unit").toString();
         }
+
+        // Estimated servings
+        String aiServings = null;
+        if (aiSuccess && aiResult.get("estimated_servings") != null) {
+            aiServings = aiResult.get("estimated_servings").toString();
+        }
         
-        // Category mapping: Cooked Meal / Fresh Fruit / Bakery etc. might be returned by AI
-        // Wait, the frontend category dropdown supports VEG, NON_VEG, EGG.
-        // How do we map AI category or food_type to the frontend VEG/NON_VEG/EGG?
+        // Category mapping
         String mappedCategory = null;
         if (aiSuccess && aiFoodType != null) {
             String typeLower = aiFoodType.toLowerCase();
@@ -398,6 +407,20 @@ public class FoodListingService {
             }
         }
 
+        // ---- LOGGING ----
+        org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FoodListingService.class);
+        log.info("========== AI MERGE RESULT ==========");
+        log.info("aiSuccess={}", aiSuccess);
+        log.info("aiFoodName={}", aiFoodName);
+        log.info("aiFoodType={}", aiFoodType);
+        log.info("aiCategoryStr={}", aiCategoryStr);
+        log.info("mappedCategory={}", mappedCategory);
+        log.info("aiQuantity={}", aiQuantity);
+        log.info("aiServings={}", aiServings);
+        log.info("aiAllergens={}", aiAllergens);
+        log.info("aiDescription={}", aiDescription);
+        log.info("=====================================");
+
         // Apply Priority 1 (Manual) > Priority 2 (AI)
         mergedFood.put("foodName", isNotEmpty(manualFoodName) ? manualFoodName : (aiSuccess && isNotEmpty(aiFoodName) ? aiFoodName : ""));
         mergedFood.put("category", isNotEmpty(manualCategory) ? manualCategory : mappedCategory);
@@ -408,6 +431,7 @@ public class FoodListingService {
         mergedFood.put("unit", isNotEmpty(manualUnit) ? manualUnit : (aiSuccess && isNotEmpty(aiUnit) ? aiUnit : "MEALS"));
         mergedFood.put("allergens", isNotEmpty(manualAllergens) ? manualAllergens : (aiSuccess && isNotEmpty(aiAllergens) ? aiAllergens : ""));
         mergedFood.put("safeConsumptionHours", isNotEmpty(manualSafeHours) ? manualSafeHours : "");
+        mergedFood.put("estimatedServings", isNotEmpty(aiServings) ? aiServings : "");
 
         // Build the metadata response
         java.util.Map<String, Object> result = new java.util.HashMap<>();
@@ -438,6 +462,7 @@ public class FoodListingService {
             if (isNotEmpty(aiAllergens)) fieldsDetected.add("allergens");
             if (isNotEmpty(aiQuantity)) fieldsDetected.add("quantity");
             if (isNotEmpty(aiUnit)) fieldsDetected.add("unit");
+            if (isNotEmpty(aiServings)) fieldsDetected.add("servings");
         }
         aiMeta.put("fieldsDetected", fieldsDetected);
         
@@ -451,7 +476,14 @@ public class FoodListingService {
         
         result.put("ai", aiMeta);
         
-        if (aiSuccess && aiResult.get("extractedDetails") != null) {
+        // ---- CRITICAL FIX: Forward food_items from FastAPI as extractedDetails.foodItems ----
+        // FastAPI returns: food_items: [{ name: "Medu Wada", confidence: 0.98 }, ...]
+        if (aiSuccess && aiResult.get("food_items") instanceof java.util.List) {
+            java.util.List<?> foodItemsList = (java.util.List<?>) aiResult.get("food_items");
+            java.util.Map<String, Object> extractedDetails = new java.util.HashMap<>();
+            extractedDetails.put("foodItems", foodItemsList);
+            result.put("extractedDetails", extractedDetails);
+        } else if (aiSuccess && aiResult.get("extractedDetails") != null) {
             result.put("extractedDetails", aiResult.get("extractedDetails"));
         }
         
