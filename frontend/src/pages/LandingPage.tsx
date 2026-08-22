@@ -182,26 +182,26 @@ export const LandingPage: React.FC = () => {
             
             <div className="lg:col-span-7">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div className="bg-white border border-natural-border p-6 rounded-2xl shadow-xs space-y-2 hover:border-brand-200 transition-colors flex flex-col items-start text-left">
+                <div className="bg-white border border-natural-border p-6 rounded-2xl shadow-sm space-y-3 hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300 flex flex-col items-start text-left">
                   <Trash2 className="w-6 h-6 text-brand-600" />
-                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-natural-text pt-1">1/3 of All Food</h4>
-                  <p className="text-[11px] text-natural-muted leading-relaxed font-semibold">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text pt-1">1/3 of All Food</h4>
+                  <p className="text-sm text-natural-muted leading-relaxed font-medium">
                     Produced globally goes to landfill, representing wasted energy and increased environmental strain.
                   </p>
                 </div>
                 
-                <div className="bg-white border border-natural-border p-6 rounded-2xl shadow-xs space-y-2 hover:border-brand-200 transition-colors flex flex-col items-start text-left">
+                <div className="bg-white border border-natural-border p-6 rounded-2xl shadow-sm space-y-3 hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300 flex flex-col items-start text-left">
                   <Clock className="w-6 h-6 text-brand-600" />
-                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-natural-text pt-1">Safe Consumption</h4>
-                  <p className="text-[11px] text-natural-muted leading-relaxed font-semibold">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text pt-1">Safe Consumption</h4>
+                  <p className="text-sm text-natural-muted leading-relaxed font-medium">
                     Surplus meals must be picked up and safely redistributed within tight expiration timeframes.
                   </p>
                 </div>
 
-                <div className="bg-white border border-natural-border p-6 rounded-2xl shadow-xs space-y-2 hover:border-brand-200 transition-colors flex flex-col items-start text-left">
+                <div className="bg-white border border-natural-border p-6 rounded-2xl shadow-sm space-y-3 hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300 flex flex-col items-start text-left">
                   <Bike className="w-6 h-6 text-brand-600" />
-                  <h4 className="font-bold text-[10px] uppercase tracking-wider text-natural-text pt-1">Detour Efficiency</h4>
-                  <p className="text-[11px] text-natural-muted leading-relaxed font-semibold">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text pt-1">Detour Efficiency</h4>
+                  <p className="text-sm text-natural-muted leading-relaxed font-medium">
                     We must connect pickup points to shelters by leveraging existing commuter travel routes.
                   </p>
                 </div>
@@ -213,46 +213,46 @@ export const LandingPage: React.FC = () => {
 
       {/* 3. How It Works & System Impact Section */}
       <section id="how-it-works" className="py-24 bg-white border-t border-natural-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-12">
-          <div className="space-y-3">
-            <span className="text-[10px] bg-brand-50 border border-brand-100 text-brand-700 px-3 py-1 rounded-full font-black uppercase tracking-wider font-mono">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-16">
+          <div className="space-y-4">
+            <span className="text-xs bg-brand-50 border border-brand-100 text-brand-700 px-4 py-1.5 rounded-full font-black uppercase tracking-wider font-mono shadow-sm">
               Redistribution Lifecycle
             </span>
-            <h2 className="text-2xl font-display font-black uppercase tracking-wider text-natural-text">How E-Meal Works</h2>
-            <p className="max-w-xl mx-auto text-natural-muted text-xs font-semibold">
+            <h2 className="text-3xl font-display font-black uppercase tracking-wider text-natural-text pt-2">How E-Meal Works</h2>
+            <p className="max-w-xl mx-auto text-natural-muted text-sm font-medium">
               An optimized end-to-end redistribution system reducing transit footprint by leveraging existing commuter paths.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="p-6 bg-natural-bg border border-natural-border rounded-xl space-y-4 text-left hover:border-brand-200 transition-colors">
-              <span className="text-xl font-mono font-black text-brand-600 block">01</span>
-              <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text">Post Surplus</h4>
-              <p className="text-[11px] text-natural-muted leading-relaxed font-medium">
+            <div className="p-8 bg-natural-bg border border-natural-border rounded-2xl space-y-4 text-left hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+              <span className="text-2xl font-mono font-black text-brand-600 block">01</span>
+              <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text">Post Surplus</h4>
+              <p className="text-sm text-natural-muted leading-relaxed font-medium">
                 Food providers post excess prepared meals, specifying safe consumption expiration timers and coordinates.
               </p>
             </div>
 
-            <div className="p-6 bg-natural-bg border border-natural-border rounded-xl space-y-4 text-left hover:border-brand-200 transition-colors">
-              <span className="text-xl font-mono font-black text-brand-600 block">02</span>
-              <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text">Intelligent Match</h4>
-              <p className="text-[11px] text-natural-muted leading-relaxed font-medium">
+            <div className="p-8 bg-natural-bg border border-natural-border rounded-2xl space-y-4 text-left hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+              <span className="text-2xl font-mono font-black text-brand-600 block">02</span>
+              <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text">Intelligent Match</h4>
+              <p className="text-sm text-natural-muted leading-relaxed font-medium">
                 The algorithm identifies volunteers whose routine transit overlaps with the pickup and drop shelter locations.
               </p>
             </div>
 
-            <div className="p-6 bg-natural-bg border border-natural-border rounded-xl space-y-4 text-left hover:border-brand-200 transition-colors">
-              <span className="text-xl font-mono font-black text-brand-600 block">03</span>
-              <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text">Pickup & Verify</h4>
-              <p className="text-[11px] text-natural-muted leading-relaxed font-medium">
+            <div className="p-8 bg-natural-bg border border-natural-border rounded-2xl space-y-4 text-left hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+              <span className="text-2xl font-mono font-black text-brand-600 block">03</span>
+              <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text">Pickup & Verify</h4>
+              <p className="text-sm text-natural-muted leading-relaxed font-medium">
                 Volunteers verify pickups with 6-digit OTP codes, locking coordinates and shifting tasks to transit-state.
               </p>
             </div>
 
-            <div className="p-6 bg-natural-bg border border-natural-border rounded-xl space-y-4 text-left hover:border-brand-200 transition-colors">
-              <span className="text-xl font-mono font-black text-brand-600 block">04</span>
-              <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text">Deliver & Track</h4>
-              <p className="text-[11px] text-natural-muted leading-relaxed font-medium">
+            <div className="p-8 bg-natural-bg border border-natural-border rounded-2xl space-y-4 text-left hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+              <span className="text-2xl font-mono font-black text-brand-600 block">04</span>
+              <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text">Deliver & Track</h4>
+              <p className="text-sm text-natural-muted leading-relaxed font-medium">
                 Destinations register delivery verification via drop OTP, photo confirmations, and GPS geo-bounding.
               </p>
             </div>
@@ -268,20 +268,20 @@ export const LandingPage: React.FC = () => {
             
             {/* LEFT Column: Story / Content */}
             <div className="lg:col-span-7 space-y-6 text-left">
-              <span className="text-[10px] bg-brand-50 border border-brand-100 text-brand-700 px-3 py-1 rounded-full font-black uppercase tracking-wider">
+              <span className="text-xs bg-brand-50 border border-brand-100 text-brand-700 px-4 py-1.5 rounded-full font-black uppercase tracking-wider shadow-sm">
                 Who We Are
               </span>
-              <h2 className="text-3xl font-display font-black uppercase tracking-tight text-natural-text leading-tight">
+              <h2 className="text-4xl font-display font-black uppercase tracking-tight text-natural-text leading-tight pt-2">
                 Who We Are
               </h2>
-              <p className="text-xs sm:text-sm text-natural-text font-black leading-relaxed">
+              <p className="text-base sm:text-lg text-natural-text font-black leading-relaxed">
                 Built by students who believe that good food should never become waste when someone nearby could benefit from it.
               </p>
-              <div className="space-y-4 text-xs text-natural-muted font-medium leading-relaxed">
+              <div className="space-y-4 text-sm text-natural-muted font-medium leading-relaxed">
                 <p>
                   We are a team of four students working together to build a practical technology-driven solution for one of the problems we see around us every day — perfectly usable food being discarded while communities continue to face food insecurity.
                 </p>
-                <p className="font-bold text-natural-text text-sm font-mono border-l-2 border-brand-500 pl-4 py-1 my-3 bg-white/50">
+                <p className="font-bold text-natural-text text-base font-mono border-l-4 border-brand-500 pl-5 py-2 my-4 bg-white/60 rounded-r-lg shadow-sm">
                   "What if the food that is about to be wasted could reach someone who actually needs it?"
                 </p>
                 <p>
@@ -337,53 +337,61 @@ export const LandingPage: React.FC = () => {
 
       {/* 5. What Motivates Us Section */}
       <section className="py-24 bg-white border-t border-natural-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          <div className="text-center space-y-3">
-            <span className="text-[10px] bg-brand-50 border border-brand-100 text-brand-700 px-3 py-1 rounded-full font-black uppercase tracking-wider">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
+          <div className="text-center space-y-4">
+            <span className="text-xs bg-brand-50 border border-brand-100 text-brand-700 px-4 py-1.5 rounded-full font-black uppercase tracking-wider shadow-sm">
               Our Motivation
             </span>
-            <h2 className="text-2xl font-display font-black uppercase tracking-wider text-natural-text">
+            <h2 className="text-3xl font-display font-black uppercase tracking-wider text-natural-text pt-2">
               What Motivates Us
             </h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             
-            <div className="bg-[#FAF9F5] border border-natural-border p-6 rounded-2xl shadow-sm text-left flex flex-col justify-between hover:border-brand-200 transition-colors">
-              <div className="space-y-3">
-                <UtensilsCrossed className="w-6 h-6 text-brand-600" />
-                <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text pt-1">Food should not go to waste</h4>
-                <p className="text-[11px] text-natural-muted leading-relaxed font-semibold">
+            <div className="bg-[#FAF9F5] border border-natural-border p-8 rounded-2xl shadow-sm text-left flex flex-col justify-between hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+              <div className="space-y-4">
+                <div className="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center">
+                  <UtensilsCrossed className="w-6 h-6 text-brand-600" />
+                </div>
+                <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text pt-2">Food should not go to waste</h4>
+                <p className="text-sm text-natural-muted leading-relaxed font-medium">
                   Large amounts of edible surplus food can be generated by restaurants, events, institutions and other food providers. Our goal is to create a reliable path for that surplus to reach people instead of becoming waste.
                 </p>
               </div>
             </div>
 
-            <div className="bg-[#FAF9F5] border border-natural-border p-6 rounded-2xl shadow-sm text-left flex flex-col justify-between hover:border-brand-200 transition-colors">
-              <div className="space-y-3">
-                <Cpu className="w-6 h-6 text-brand-600" />
-                <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text pt-1">Technology should solve real problems</h4>
-                <p className="text-[11px] text-natural-muted leading-relaxed font-semibold">
+            <div className="bg-[#FAF9F5] border border-natural-border p-8 rounded-2xl shadow-sm text-left flex flex-col justify-between hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+              <div className="space-y-4">
+                <div className="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center">
+                  <Cpu className="w-6 h-6 text-brand-600" />
+                </div>
+                <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text pt-2">Technology should solve real problems</h4>
+                <p className="text-sm text-natural-muted leading-relaxed font-medium">
                   We wanted to build something beyond a conventional CRUD application. The project combines real-time location, intelligent volunteer matching, route-aware delivery, verification and data-driven decision making.
                 </p>
               </div>
             </div>
 
-            <div className="bg-[#FAF9F5] border border-natural-border p-6 rounded-2xl shadow-sm text-left flex flex-col justify-between hover:border-brand-200 transition-colors">
-              <div className="space-y-3">
-                <ShieldCheck className="w-6 h-6 text-brand-600" />
-                <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text pt-1">Every delivery should be trustworthy</h4>
-                <p className="text-[11px] text-natural-muted leading-relaxed font-semibold">
+            <div className="bg-[#FAF9F5] border border-natural-border p-8 rounded-2xl shadow-sm text-left flex flex-col justify-between hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+              <div className="space-y-4">
+                <div className="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center">
+                  <ShieldCheck className="w-6 h-6 text-brand-600" />
+                </div>
+                <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text pt-2">Every delivery should be trustworthy</h4>
+                <p className="text-sm text-natural-muted leading-relaxed font-medium">
                   Food redistribution requires trust. That is why our workflow includes pickup verification, destination OTP verification, geotagged delivery proof and photo validation.
                 </p>
               </div>
             </div>
 
-            <div className="bg-[#FAF9F5] border border-natural-border p-6 rounded-2xl shadow-sm text-left flex flex-col justify-between hover:border-brand-200 transition-colors">
-              <div className="space-y-3">
-                <Globe className="w-6 h-6 text-brand-600" />
-                <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text pt-1">Small actions can create measurable impact</h4>
-                <p className="text-[11px] text-natural-muted leading-relaxed font-semibold">
+            <div className="bg-[#FAF9F5] border border-natural-border p-8 rounded-2xl shadow-sm text-left flex flex-col justify-between hover:border-brand-200 hover:-translate-y-1 hover:shadow-md transition-all duration-300">
+              <div className="space-y-4">
+                <div className="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center">
+                  <Globe className="w-6 h-6 text-brand-600" />
+                </div>
+                <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text pt-2">Small actions can create measurable impact</h4>
+                <p className="text-sm text-natural-muted leading-relaxed font-medium">
                   A volunteer travelling on an existing route can make a meaningful difference without making a separate journey. We want to turn those small opportunities into measurable social impact.
                 </p>
               </div>
@@ -397,57 +405,57 @@ export const LandingPage: React.FC = () => {
       <section className="py-24 bg-[#FAF9F5] border-t border-natural-border text-left">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-center">
             
-            <div className="lg:col-span-5 space-y-4">
-              <span className="text-[10px] bg-brand-50 border border-brand-100 text-brand-700 px-3 py-1 rounded-full font-black uppercase tracking-wider">
+            <div className="lg:col-span-5 space-y-6">
+              <span className="text-xs bg-brand-50 border border-brand-100 text-brand-700 px-4 py-1.5 rounded-full font-black uppercase tracking-wider shadow-sm">
                 Development Path
               </span>
-              <h3 className="text-2xl font-display font-black text-natural-text uppercase tracking-wider">
+              <h3 className="text-3xl font-display font-black text-natural-text uppercase tracking-wider leading-tight pt-2">
                 From an Idea to a Working Platform
               </h3>
-              <p className="text-[11px] sm:text-xs text-natural-muted font-semibold leading-relaxed">
+              <p className="text-sm text-natural-muted font-medium leading-relaxed">
                 We began by studying the gaps in existing food redistribution approaches. Many solutions can connect donors and recipients, but the practical challenge remains: How do we make the movement of food efficient, timely and trustworthy?
               </p>
-              <p className="text-[11px] sm:text-xs text-natural-muted font-semibold leading-relaxed">
+              <p className="text-sm text-natural-muted font-medium leading-relaxed">
                 This led us to design a route-based redistribution model where volunteers can discover surplus food that fits their existing journey. The system then manages the journey from food posting to pickup, live delivery, destination verification, proof validation and reward allocation.
               </p>
             </div>
 
-            <div className="lg:col-span-7 bg-white border border-natural-border rounded-2xl p-6 relative">
-              <div className="absolute top-0 right-0 left-0 h-1 bg-brand-600 rounded-t-2xl"></div>
-              <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text mb-6">Our Design Timeline</h4>
+            <div className="lg:col-span-7 bg-white border border-natural-border rounded-2xl p-8 relative shadow-sm hover:border-brand-200 transition-colors">
+              <div className="absolute top-0 right-0 left-0 h-1.5 bg-brand-600 rounded-t-2xl"></div>
+              <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text mb-8">Our Design Timeline</h4>
               
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs font-mono font-bold text-natural-text">
-                <div className="p-3 bg-[#FAF9F5] rounded-xl border border-natural-border text-center">
-                  <span className="block text-[8px] text-brand-600">01</span>
+                <div className="p-4 bg-[#FAF9F5] rounded-xl border border-natural-border text-center hover:border-brand-300 transition-colors hover:shadow-sm">
+                  <span className="block text-[10px] text-brand-600 mb-1">01</span>
                   <span>IDEA</span>
                 </div>
-                <div className="p-3 bg-[#FAF9F5] rounded-xl border border-natural-border text-center">
-                  <span className="block text-[8px] text-brand-600">02</span>
+                <div className="p-4 bg-[#FAF9F5] rounded-xl border border-natural-border text-center hover:border-brand-300 transition-colors hover:shadow-sm">
+                  <span className="block text-[10px] text-brand-600 mb-1">02</span>
                   <span>IDENTIFY THE PROBLEM</span>
                 </div>
-                <div className="p-3 bg-[#FAF9F5] rounded-xl border border-natural-border text-center">
-                  <span className="block text-[8px] text-brand-600">03</span>
+                <div className="p-4 bg-[#FAF9F5] rounded-xl border border-natural-border text-center hover:border-brand-300 transition-colors hover:shadow-sm">
+                  <span className="block text-[10px] text-brand-600 mb-1">03</span>
                   <span>DESIGN MODEL</span>
                 </div>
-                <div className="p-3 bg-[#FAF9F5] rounded-xl border border-natural-border text-center">
-                  <span className="block text-[8px] text-brand-600">04</span>
+                <div className="p-4 bg-[#FAF9F5] rounded-xl border border-natural-border text-center hover:border-brand-300 transition-colors hover:shadow-sm">
+                  <span className="block text-[10px] text-brand-600 mb-1">04</span>
                   <span>BUILD THE PLATFORM</span>
                 </div>
-                <div className="p-3 bg-[#FAF9F5] rounded-xl border border-natural-border text-center">
-                  <span className="block text-[8px] text-brand-600">05</span>
+                <div className="p-4 bg-[#FAF9F5] rounded-xl border border-natural-border text-center hover:border-brand-300 transition-colors hover:shadow-sm">
+                  <span className="block text-[10px] text-brand-600 mb-1">05</span>
                   <span>CONNECT ENTITIES</span>
                 </div>
-                <div className="p-3 bg-[#FAF9F5] rounded-xl border border-natural-border text-center">
-                  <span className="block text-[8px] text-brand-600">06</span>
+                <div className="p-4 bg-[#FAF9F5] rounded-xl border border-natural-border text-center hover:border-brand-300 transition-colors hover:shadow-sm">
+                  <span className="block text-[10px] text-brand-600 mb-1">06</span>
                   <span>ENABLE LIVE TRACKING</span>
                 </div>
-                <div className="p-3 bg-[#FAF9F5] rounded-xl border border-natural-border text-center">
-                  <span className="block text-[8px] text-brand-600">07</span>
+                <div className="p-4 bg-[#FAF9F5] rounded-xl border border-natural-border text-center hover:border-brand-300 transition-colors hover:shadow-sm">
+                  <span className="block text-[10px] text-brand-600 mb-1">07</span>
                   <span>VERIFY EVERY TASK</span>
                 </div>
-                <div className="p-3 bg-brand-50 rounded-xl border border-brand-100 text-center text-brand-850">
+                <div className="p-4 bg-brand-50 rounded-xl border border-brand-200 text-center text-brand-850 hover:shadow-sm transition-all shadow-sm">
                   <span className="block text-[8px] text-brand-700">08</span>
                   <span>MEASURE IMPACT</span>
                 </div>
@@ -458,83 +466,82 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 7. Meet The Team Section */}
-      <section className="py-24 bg-white border-t border-natural-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-          
-          <div className="text-center space-y-3">
-            <span className="text-[10px] bg-brand-50 border border-brand-100 text-brand-700 px-3 py-1 rounded-full font-black uppercase tracking-wider animate-pulse">
-              Student Founders
+      {/* 7. The Team Section */}
+      <section className="py-24 bg-white border-t border-natural-border text-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
+          <div className="space-y-4">
+            <span className="text-xs bg-brand-50 border border-brand-100 text-brand-700 px-4 py-1.5 rounded-full font-black uppercase tracking-wider font-mono shadow-sm">
+              The Team
             </span>
-            <h2 className="text-2xl font-display font-black uppercase tracking-wider text-natural-text">
-              Meet the Team
+            <h2 className="text-3xl font-display font-black uppercase tracking-wider text-natural-text pt-2">
+              Who built E-Meal?
             </h2>
-            <p className="max-w-xl mx-auto text-natural-muted text-xs font-semibold">
-              Four students, one shared vision — turning surplus food into meaningful community impact.
+            <p className="max-w-2xl mx-auto text-natural-muted text-sm font-medium">
+              We are a group of four students driving this platform from concept to reality, working across frontend, backend, routing algorithms, and testing.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             
-            {/* Card 1: A Harini */}
-            <div className="bg-[#FAF9F5] border border-natural-border rounded-2xl p-6 shadow-xs text-left flex flex-col justify-between space-y-4 hover:-translate-y-1 hover:border-brand-300 hover:shadow-md transition-all duration-300">
-              <div className="space-y-3">
-                <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center font-bold text-base text-brand-750 font-mono tracking-wider border border-brand-200 select-none">
-                  AH
+            {/* Card 1: Harini */}
+            <div className="bg-[#FAF9F5] border border-natural-border rounded-2xl p-8 shadow-sm text-left flex flex-col justify-between space-y-4 hover:-translate-y-1 hover:border-brand-300 hover:shadow-md transition-all duration-300">
+              <div className="space-y-4">
+                <div className="w-16 h-16 rounded-full bg-brand-100 flex items-center justify-center font-bold text-lg text-brand-750 font-mono tracking-wider border border-brand-200 select-none shadow-sm">
+                  HR
                 </div>
                 <div>
-                  <h4 className="font-display font-black text-sm uppercase tracking-wider text-natural-text leading-tight">A Harini</h4>
-                  <p className="text-[9px] uppercase font-mono font-bold text-brand-600 mt-0.5">Co-Founder / Team Member</p>
+                  <h4 className="font-display font-black text-base uppercase tracking-wider text-natural-text leading-tight">Harini</h4>
+                  <p className="text-[10px] uppercase font-mono font-bold text-brand-600 mt-1">Co-Founder / Team Member</p>
                 </div>
-                <p className="text-[11px] text-natural-muted font-semibold leading-relaxed">
-                  Part of the team working on the design, development and overall implementation of the food redistribution platform.
+                <p className="text-sm text-natural-muted font-medium leading-relaxed">
+                  Working to design and structure the platform, ensuring the core idea translates into a functional system.
                 </p>
               </div>
             </div>
 
             {/* Card 2: Bhoomika M */}
-            <div className="bg-[#FAF9F5] border border-natural-border rounded-2xl p-6 shadow-xs text-left flex flex-col justify-between space-y-4 hover:-translate-y-1 hover:border-brand-300 hover:shadow-md transition-all duration-300">
-              <div className="space-y-3">
-                <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center font-bold text-base text-brand-750 font-mono tracking-wider border border-brand-200 select-none">
+            <div className="bg-[#FAF9F5] border border-natural-border rounded-2xl p-8 shadow-sm text-left flex flex-col justify-between space-y-4 hover:-translate-y-1 hover:border-brand-300 hover:shadow-md transition-all duration-300">
+              <div className="space-y-4">
+                <div className="w-16 h-16 rounded-full bg-brand-100 flex items-center justify-center font-bold text-lg text-brand-750 font-mono tracking-wider border border-brand-200 select-none shadow-sm">
                   BM
                 </div>
                 <div>
-                  <h4 className="font-display font-black text-sm uppercase tracking-wider text-natural-text leading-tight">Bhoomika M</h4>
-                  <p className="text-[9px] uppercase font-mono font-bold text-brand-600 mt-0.5">Co-Founder / Team Member</p>
+                  <h4 className="font-display font-black text-base uppercase tracking-wider text-natural-text leading-tight">Bhoomika M</h4>
+                  <p className="text-[10px] uppercase font-mono font-bold text-brand-600 mt-1">Co-Founder / Team Member</p>
                 </div>
-                <p className="text-[11px] text-natural-muted font-semibold leading-relaxed">
+                <p className="text-sm text-natural-muted font-medium leading-relaxed">
                   Contributing to the development and refinement of the platform, helping turn the food redistribution concept into a practical working solution.
                 </p>
               </div>
             </div>
 
             {/* Card 3: Ramya AM */}
-            <div className="bg-[#FAF9F5] border border-natural-border rounded-2xl p-6 shadow-xs text-left flex flex-col justify-between space-y-4 hover:-translate-y-1 hover:border-brand-300 hover:shadow-md transition-all duration-300">
-              <div className="space-y-3">
-                <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center font-bold text-base text-brand-750 font-mono tracking-wider border border-brand-200 select-none">
+            <div className="bg-[#FAF9F5] border border-natural-border rounded-2xl p-8 shadow-sm text-left flex flex-col justify-between space-y-4 hover:-translate-y-1 hover:border-brand-300 hover:shadow-md transition-all duration-300">
+              <div className="space-y-4">
+                <div className="w-16 h-16 rounded-full bg-brand-100 flex items-center justify-center font-bold text-lg text-brand-750 font-mono tracking-wider border border-brand-200 select-none shadow-sm">
                   RA
                 </div>
                 <div>
-                  <h4 className="font-display font-black text-sm uppercase tracking-wider text-natural-text leading-tight">Ramya AM</h4>
-                  <p className="text-[9px] uppercase font-mono font-bold text-brand-600 mt-0.5">Co-Founder / Team Member</p>
+                  <h4 className="font-display font-black text-base uppercase tracking-wider text-natural-text leading-tight">Ramya AM</h4>
+                  <p className="text-[10px] uppercase font-mono font-bold text-brand-600 mt-1">Co-Founder / Team Member</p>
                 </div>
-                <p className="text-[11px] text-natural-muted font-semibold leading-relaxed">
+                <p className="text-sm text-natural-muted font-medium leading-relaxed">
                   Contributing to the project development, research and implementation of the platform's core food redistribution workflow.
                 </p>
               </div>
             </div>
 
             {/* Card 4: Yashwardhan Kumar */}
-            <div className="bg-[#FAF9F5] border border-natural-border rounded-2xl p-6 shadow-xs text-left flex flex-col justify-between space-y-4 hover:-translate-y-1 hover:border-brand-300 hover:shadow-md transition-all duration-300">
-              <div className="space-y-3">
-                <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center font-bold text-base text-brand-750 font-mono tracking-wider border border-brand-200 select-none">
+            <div className="bg-[#FAF9F5] border border-natural-border rounded-2xl p-8 shadow-sm text-left flex flex-col justify-between space-y-4 hover:-translate-y-1 hover:border-brand-300 hover:shadow-md transition-all duration-300">
+              <div className="space-y-4">
+                <div className="w-16 h-16 rounded-full bg-brand-100 flex items-center justify-center font-bold text-lg text-brand-750 font-mono tracking-wider border border-brand-200 select-none shadow-sm">
                   YK
                 </div>
                 <div>
-                  <h4 className="font-display font-black text-sm uppercase tracking-wider text-natural-text leading-tight">Yashwardhan Kumar</h4>
-                  <p className="text-[9px] uppercase font-mono font-bold text-brand-600 mt-0.5">Co-Founder / Team Member</p>
+                  <h4 className="font-display font-black text-base uppercase tracking-wider text-natural-text leading-tight">Yashwardhan Kumar</h4>
+                  <p className="text-[10px] uppercase font-mono font-bold text-brand-600 mt-1">Co-Founder / Team Member</p>
                 </div>
-                <p className="text-[11px] text-natural-muted font-semibold leading-relaxed">
+                <p className="text-sm text-natural-muted font-medium leading-relaxed">
                   Working on the overall product development, system implementation and integration of the platform's intelligent redistribution workflow.
                 </p>
               </div>
@@ -543,17 +550,17 @@ export const LandingPage: React.FC = () => {
           </div>
 
           {/* Team Story Section */}
-          <div className="bg-[#FAF9F5] border border-natural-border p-6 rounded-2xl shadow-xs text-left max-w-2xl mx-auto space-y-2">
-            <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text">Built together, from an idea to a working platform.</h4>
-            <p className="text-[11px] text-natural-muted leading-relaxed font-semibold">
+          <div className="bg-[#FAF9F5] border border-natural-border p-8 rounded-2xl shadow-sm text-left max-w-3xl mx-auto space-y-3">
+            <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text">Built together, from an idea to a working platform.</h4>
+            <p className="text-sm text-natural-muted leading-relaxed font-medium">
               Our team came together around a simple but important problem: usable food should not become waste when it can still create value for someone else. We are combining technology, research and collaboration to build a practical system that connects food providers, volunteers and community zones in real time.
             </p>
           </div>
 
           {/* Team Contribution Specifics */}
-          <div className="bg-[#FAF9F5] border border-natural-border p-6 rounded-2xl shadow-xs text-left max-w-2xl mx-auto space-y-3">
-            <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text">Built Together</h4>
-            <p className="text-[11px] text-natural-muted leading-relaxed font-semibold">
+          <div className="bg-[#FAF9F5] border border-natural-border p-8 rounded-2xl shadow-sm text-left max-w-3xl mx-auto space-y-3">
+            <h4 className="font-bold text-sm uppercase tracking-wider text-natural-text">Built Together</h4>
+            <p className="text-sm text-natural-muted leading-relaxed font-medium">
               Our platform is a collaborative student project involving distinct contributions across product design, web application development, backend and API development, AI/ML integration, database and real-time services, testing and validation, and research and documentation.
             </p>
           </div>
@@ -562,49 +569,49 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* 8. Our Mission Section */}
-      <section className="py-24 bg-[#FAF9F5] border-t border-natural-border text-center">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-          <span className="text-[10px] bg-brand-50 border border-brand-100 text-brand-700 px-3 py-1 rounded-full font-black uppercase tracking-wider">
+      <section className="py-32 bg-[#FAF9F5] border-t border-natural-border text-center">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          <span className="text-xs bg-brand-50 border border-brand-100 text-brand-700 px-4 py-1.5 rounded-full font-black uppercase tracking-wider shadow-sm">
             Our Mission
           </span>
-          <h2 className="text-3xl sm:text-4xl font-display font-black text-natural-text uppercase tracking-tight">
+          <h2 className="text-4xl sm:text-5xl font-display font-black text-natural-text uppercase tracking-tight">
             "Turn surplus into sustenance."
           </h2>
-          <p className="max-w-2xl mx-auto text-natural-muted text-xs sm:text-sm font-semibold leading-relaxed">
+          <p className="max-w-2xl mx-auto text-natural-muted text-sm sm:text-base font-medium leading-relaxed">
             Our mission is to build a practical technology platform that makes surplus food redistribution more timely, transparent and efficient. By connecting food providers, volunteers and community zones through real-time coordination, we aim to reduce avoidable food waste while helping usable food reach people who need it.
           </p>
         </div>
       </section>
 
       {/* 9. Impact Statement & Call To Action Section */}
-      <section className="py-24 bg-[#1C2721] text-white border-t border-natural-border text-center relative overflow-hidden">
+      <section className="py-32 bg-[#1C2721] text-white border-t border-natural-border text-center relative overflow-hidden">
         <div className="absolute inset-0 opacity-[0.08] pointer-events-none">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <path d="M-50,200 C150,350 350,150 700,300" stroke="white" strokeWidth="4" strokeDasharray="8 8" fill="none" />
           </svg>
         </div>
 
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 z-10 relative">
-          <div className="space-y-4">
-            <h3 className="text-xl sm:text-2xl font-display font-black text-white uppercase tracking-wider leading-tight">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 z-10 relative">
+          <div className="space-y-6">
+            <h3 className="text-2xl sm:text-3xl font-display font-black text-white uppercase tracking-wider leading-tight">
               Every meal rescued is more than food saved.
             </h3>
-            <p className="max-w-xl mx-auto text-brand-200 text-xs sm:text-sm font-semibold leading-relaxed">
+            <p className="max-w-xl mx-auto text-brand-200 text-sm sm:text-base font-medium leading-relaxed">
               It represents less waste, one more delivery, one more volunteer contribution, and one more opportunity to support a community. We are starting with a student project, but we are building it with the mindset of a real-world product.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-center gap-3">
+          <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button
               onClick={() => navigate(isAuthenticated ? getDashboardPath() : '/login?register=true')}
-              className="btn-primary flex items-center justify-center space-x-2 text-xs py-3 px-6 bg-brand-600 hover:bg-brand-700 text-white font-bold"
+              className="btn-primary flex items-center justify-center space-x-2 text-sm py-4 px-8 bg-brand-600 hover:bg-brand-700 text-white font-bold hover:scale-105 active:scale-95 transition-all duration-300"
             >
               <span>Join the Movement</span>
               <ArrowRight className="w-4 h-4" />
             </button>
             <a
               href="#how-it-works"
-              className="btn-secondary text-center text-xs py-3 px-6 border-brand-850 hover:bg-[#FAF9F5] text-natural-text bg-[#FAF9F5]"
+              className="btn-secondary flex items-center justify-center text-center text-sm py-4 px-8 border-brand-850 hover:bg-[#FAF9F5] text-natural-text bg-[#FAF9F5] hover:scale-105 active:scale-95 transition-all duration-300"
             >
               See How It Works
             </a>
@@ -613,15 +620,15 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* Footer */}
-      <footer className="mt-auto bg-[#1C2721] text-[#A6B2AB] py-12 text-xs border-t border-natural-border">
+      <footer className="mt-auto bg-[#1C2721] text-[#A6B2AB] py-16 text-sm border-t border-natural-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6 text-center">
-          <div className="flex items-center space-x-2.5">
-            <span className="w-8 h-8 rounded-lg bg-[#FAF9F5] flex items-center justify-center text-brand-650 font-extrabold text-sm shadow-xs select-none">
+          <div className="flex items-center space-x-3">
+            <span className="w-10 h-10 rounded-lg bg-[#FAF9F5] flex items-center justify-center text-brand-650 font-extrabold text-base shadow-xs select-none">
               E
             </span>
-            <span className="text-white font-display font-black uppercase text-[10px] tracking-widest">E-Meal Redistribution Platform</span>
+            <span className="text-white font-display font-black uppercase text-xs tracking-widest">E-Meal Redistribution Platform</span>
           </div>
-          <div className="font-semibold text-gray-500">
+          <div className="font-semibold text-gray-500 text-xs">
             © {new Date().getFullYear()} E-Meal logistics network. Built as a sustainability prototype.
           </div>
         </div>
