@@ -286,7 +286,7 @@ export const VolunteerRoutes: React.FC = () => {
           <div className="flex-1">
             <h3 className="font-display font-black text-xs uppercase tracking-wider text-natural-text">Commute-Based Redistribution</h3>
             <p className="text-[10px] text-natural-muted leading-relaxed font-semibold mt-1">
-              Specify your usual origin and destination points. E-Meal dynamically matches active donations along your route, ensuring zero-carbon detour efficiency.
+              Specify your usual origin and destination points. FoodBridge dynamically matches active donations along your route, ensuring zero-carbon detour efficiency.
             </p>
           </div>
           <div className="w-20 h-20 shrink-0 rounded-xl bg-brand-50/50 border border-brand-150 overflow-hidden flex items-center justify-center p-1.5">

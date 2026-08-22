@@ -160,12 +160,10 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         {/* Brand Logo */}
         <div className="h-16 flex items-center px-6 border-b border-natural-border bg-white">
           <Link to="/" className="flex items-center space-x-2.5 group">
-            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform duration-200">
-              <span className="font-display font-black text-sm tracking-tighter">eM</span>
-            </div>
+            <img src="/foodbridge-logo.png" alt="FoodBridge Logo" className="h-8 object-contain group-hover:scale-105 transition-transform duration-200" />
             <div className="flex flex-col text-left">
-              <span className="font-display font-black text-xs text-natural-text tracking-tight uppercase leading-none">E-Meal</span>
-              <span className="text-[8px] font-bold text-brand-500 uppercase tracking-widest leading-none mt-0.5 font-mono">Route Rescue</span>
+              <span className="font-display font-black text-xs text-natural-text tracking-tight uppercase leading-none">FoodBridge</span>
+              <span className="text-[8px] font-bold text-brand-500 uppercase tracking-tight leading-none mt-0.5 font-sans">Surplus Food. Shared Purpose.</span>
             </div>
           </Link>
         </div>

@@ -153,12 +153,10 @@ export const LoginPage: React.FC = () => {
           {/* Header section with brand info and go-back */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-natural-border pb-4 bg-white">
             <div className="flex items-center space-x-2.5">
-              <span className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white font-extrabold text-xs shadow-xs">
-                E
-              </span>
+              <img src="/foodbridge-logo.png" alt="FoodBridge Logo" className="h-8 object-contain" />
               <div className="flex flex-col text-left">
-                <span className="font-display font-black text-natural-text text-xs uppercase leading-none">E-Meal</span>
-                <span className="text-[8px] font-bold text-brand-500 uppercase tracking-widest leading-none mt-0.5">Route Rescue</span>
+                <span className="font-display font-black text-natural-text text-xs uppercase leading-none">FoodBridge</span>
+                <span className="text-[8px] font-bold text-brand-500 uppercase tracking-tight leading-none mt-0.5">Surplus Food. Shared Purpose.</span>
               </div>
             </div>
 
@@ -382,7 +380,7 @@ export const LoginPage: React.FC = () => {
               </button>
 
               <div className="text-center text-xs font-semibold bg-white">
-                <span className="text-natural-muted">New to E-Meal? </span>
+                <span className="text-natural-muted">New to FoodBridge? </span>
                 <button
                   type="button"
                   onClick={() => { setIsRegister(true); setStatusError(null); }}

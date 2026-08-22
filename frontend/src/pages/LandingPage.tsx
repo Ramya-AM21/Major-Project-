@@ -77,13 +77,13 @@ export const LandingPage: React.FC = () => {
       {/* Translucent Navbar */}
       <header className="fixed top-0 left-0 right-0 h-16 bg-[#FAF9F5]/90 backdrop-blur-md border-b border-natural-border z-50 transition-all">
         <div className="max-w-7xl mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <span className="w-8 h-8 rounded-lg bg-brand-650 flex items-center justify-center text-white font-extrabold text-sm shadow-xs select-none">
-              E
-            </span>
-            <div className="flex flex-col text-left">
-              <span className="font-display font-black text-natural-text tracking-tight text-xs uppercase leading-none">E-Meal</span>
-              <span className="text-[8px] font-bold text-brand-500 uppercase tracking-widest leading-none mt-0.5">Route Rescue</span>
+          <div className="flex-shrink-0 cursor-pointer" onClick={() => window.scrollTo(0, 0)}>
+            <div className="flex items-center space-x-3">
+              <img src="/foodbridge-logo.png" alt="FoodBridge Logo" className="h-8 object-contain" />
+              <div className="flex flex-col text-left">
+                <span className="font-display font-black text-natural-text tracking-tight text-xs uppercase leading-none">FoodBridge</span>
+                <span className="text-[8px] font-bold text-brand-500 uppercase tracking-tight leading-none mt-0.5">Surplus Food. Shared Purpose.</span>
+              </div>
             </div>
           </div>
 
@@ -218,7 +218,7 @@ export const LandingPage: React.FC = () => {
             <span className="text-xs bg-brand-50 border border-brand-100 text-brand-700 px-4 py-1.5 rounded-full font-black uppercase tracking-wider font-mono shadow-sm">
               Redistribution Lifecycle
             </span>
-            <h2 className="text-3xl font-display font-black uppercase tracking-wider text-natural-text pt-2">How E-Meal Works</h2>
+            <h2 className="text-3xl font-display font-black uppercase tracking-wider text-natural-text pt-2">How FoodBridge Works</h2>
             <p className="max-w-xl mx-auto text-natural-muted text-sm font-medium">
               An optimized end-to-end redistribution system reducing transit footprint by leveraging existing commuter paths.
             </p>
@@ -474,7 +474,7 @@ export const LandingPage: React.FC = () => {
               The Team
             </span>
             <h2 className="text-3xl font-display font-black uppercase tracking-wider text-natural-text pt-2">
-              Who built E-Meal?
+              Who built FoodBridge?
             </h2>
             <p className="max-w-2xl mx-auto text-natural-muted text-sm font-medium">
               We are a group of four students driving this platform from concept to reality, working across frontend, backend, routing algorithms, and testing.
@@ -623,13 +623,14 @@ export const LandingPage: React.FC = () => {
       <footer className="mt-auto bg-[#1C2721] text-[#A6B2AB] py-16 text-sm border-t border-natural-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6 text-center">
           <div className="flex items-center space-x-3">
-            <span className="w-10 h-10 rounded-lg bg-[#FAF9F5] flex items-center justify-center text-brand-650 font-extrabold text-base shadow-xs select-none">
-              E
-            </span>
-            <span className="text-white font-display font-black uppercase text-xs tracking-widest">E-Meal Redistribution Platform</span>
+            <img src="/foodbridge-logo.png" alt="FoodBridge Logo" className="w-10 h-10 object-contain rounded-lg" />
+            <div className="flex flex-col text-left">
+              <span className="text-white font-display font-black uppercase text-xs tracking-widest">FoodBridge</span>
+              <span className="text-[10px] font-bold text-[#A6B2AB] uppercase tracking-tight mt-0.5">Surplus Food. Shared Purpose.</span>
+            </div>
           </div>
           <div className="font-semibold text-gray-500 text-xs">
-            © {new Date().getFullYear()} E-Meal logistics network. Built as a sustainability prototype.
+            © {new Date().getFullYear()} FoodBridge logistics network. Built as a sustainability prototype.
           </div>
         </div>
       </footer>
