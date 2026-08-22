@@ -307,7 +307,7 @@ export const FindMatchingFood: React.FC = () => {
           setGpsAccuracy(accuracy);
           setGpsPermissionStatus('granted');
 
-          if (accuracy > 50) {
+          if (accuracy > 2000) {
             setGpsAccuracyWarning(`GPS accuracy is low (${Math.round(accuracy)}m). Ignoring update.`);
             return;
           } else {

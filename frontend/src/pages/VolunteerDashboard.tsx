@@ -253,9 +253,9 @@ export const VolunteerDashboard: React.FC = () => {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const { latitude, longitude, accuracy } = position.coords;
-        if (accuracy > 50) {
+        if (accuracy > 2000) {
           setReportingError(`Location accuracy is too low (${Math.round(accuracy)} meters). Please try again in an area with a clearer GPS signal.`);
           setIsReportingLocation(false);
           return;
@@ -263,6 +263,32 @@ export const VolunteerDashboard: React.FC = () => {
         setReportLatitude(latitude);
         setReportLongitude(longitude);
         setReportGpsAccuracy(accuracy);
+        
+        try {
+          const res = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+          if (res.data && res.data.address) {
+            const addr = res.data.address;
+            const street = addr.road || addr.pedestrian || addr.suburb || '';
+            const houseNumber = addr.house_number || '';
+            const fullStreet = houseNumber ? `${houseNumber} ${street}`.trim() : street;
+            
+            const city = addr.city || addr.town || addr.village || addr.county || '';
+            const state = addr.state || '';
+            const country = addr.country || '';
+            const landmark = addr.amenity || addr.building || addr.shop || addr.leisure || '';
+
+            if (landmark) setReportName(`Near ${landmark}`);
+            else if (fullStreet) setReportName(`Near ${fullStreet}`);
+            
+            if (fullStreet) setReportAddress(fullStreet);
+            if (city) setReportCity(city);
+            if (state) setReportState(state);
+            if (country) setReportCountry(country);
+          }
+        } catch (err) {
+          console.error("Reverse geocoding failed", err);
+        }
+
         setIsReportingLocation(false);
       },
       (error) => {
@@ -562,7 +588,7 @@ export const VolunteerDashboard: React.FC = () => {
           setGpsAccuracy(accuracy);
           setGpsPermissionStatus('granted');
 
-          if (accuracy > 50) {
+          if (accuracy > 2000) {
             setGpsAccuracyWarning(`GPS accuracy is low (${Math.round(accuracy)}m). Ignoring update.`);
             return;
           } else {
