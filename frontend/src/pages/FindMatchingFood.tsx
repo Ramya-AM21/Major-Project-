@@ -171,6 +171,9 @@ export const FindMatchingFood: React.FC = () => {
     );
   };
 
+  const [activeMapSelect, setActiveMapSelect] = useState<'START' | 'END' | null>(null);
+  const [mapLoading, setMapLoading] = useState(false);
+
   // Destination Autocomplete Nominatim fetch
   useEffect(() => {
     if (destinationSearch.length < 3) {
@@ -185,7 +188,8 @@ export const FindMatchingFood: React.FC = () => {
             q: destinationSearch,
             format: 'json',
             limit: 5,
-            addressdetails: 1
+            addressdetails: 1,
+            countrycodes: 'in'
           }
         });
         setDestinationSuggestions(res.data || []);
@@ -204,6 +208,32 @@ export const FindMatchingFood: React.FC = () => {
     setEndLng(parseFloat(suggestion.lon));
     setDestinationSuggestions([]);
     setDestinationSearch(suggestion.display_name);
+  };
+
+  const handleMapClick = async (lat: number, lng: number) => {
+    if (!activeMapSelect) return;
+    setMapLoading(true);
+    try {
+      const res = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+      const address = res.data && res.data.display_name ? res.data.display_name : `Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      
+      if (activeMapSelect === 'START') {
+        setStartName(address);
+        setStartLat(lat);
+        setStartLng(lng);
+        setActiveMapSelect(null);
+      } else {
+        setEndName(address);
+        setDestinationSearch(address);
+        setEndLat(lat);
+        setEndLng(lng);
+        setActiveMapSelect(null);
+      }
+    } catch (err) {
+      console.error("Reverse geocoding failed", err);
+    } finally {
+      setMapLoading(false);
+    }
   };
 
   // OSRM route geometry calculation
@@ -631,14 +661,24 @@ export const FindMatchingFood: React.FC = () => {
                 <div>
                   <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Current Location</label>
                   <div className="flex gap-2 mt-1.5">
-                    <input
-                      type="text"
-                      required
-                      value={startName}
-                      onChange={(e) => setStartName(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
-                      placeholder="Origin Address"
-                    />
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        required
+                        value={startName}
+                        onChange={(e) => setStartName(e.target.value)}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
+                        placeholder="Origin Address"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveMapSelect(activeMapSelect === 'START' ? null : 'START')}
+                      className={`px-3 py-2 text-xs rounded-lg font-bold whitespace-nowrap border transition-colors ${activeMapSelect === 'START' ? 'bg-brand-600 text-white border-brand-600' : 'bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100'}`}
+                      title="Pin on Map"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={handleUseCurrentLocation}
@@ -657,19 +697,29 @@ export const FindMatchingFood: React.FC = () => {
                 {/* Autocomplete Destination Search Box */}
                 <div className="relative">
                   <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Search Destination</label>
-                  <div className="relative mt-1.5">
-                    <input
-                      type="text"
-                      required
-                      value={destinationSearch}
-                      onChange={(e) => setDestinationSearch(e.target.value)}
-                      className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
-                      placeholder="Type destination area name..."
-                    />
-                    <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    {loadingSuggestions && (
-                      <Loader2 className="w-3.5 h-3.5 text-brand-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
-                    )}
+                  <div className="flex gap-2 mt-1.5">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        required
+                        value={destinationSearch}
+                        onChange={(e) => setDestinationSearch(e.target.value)}
+                        className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
+                        placeholder="Type destination area name..."
+                      />
+                      <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      {loadingSuggestions && (
+                        <Loader2 className="w-3.5 h-3.5 text-brand-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveMapSelect(activeMapSelect === 'END' ? null : 'END')}
+                      className={`px-3 py-2 text-xs rounded-lg font-bold whitespace-nowrap border transition-colors ${activeMapSelect === 'END' ? 'bg-brand-600 text-white border-brand-600' : 'bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100'}`}
+                      title="Pin on Map"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
                   {destinationSuggestions.length > 0 && (
@@ -736,21 +786,28 @@ export const FindMatchingFood: React.FC = () => {
             </form>
           </div>
 
-          {/* Interactive Route Pins map view */}
+          {/* MAP VISUALIZATION PANE */}
           <div className="lg:col-span-7 flex flex-col min-h-[400px]">
             <div className="p-3 bg-brand-50 border border-brand-100 rounded-xl mb-4 text-xs font-semibold text-brand-850 flex items-start space-x-2">
               <Compass className="w-4 h-4 shrink-0 text-brand-750 mt-0.5" />
               <span>
-                Origin is set to your device GPS location. Search for a destination to preview the actual route path geometry.
+                Origin is set to your device GPS location. Search for a destination to preview the actual route path geometry. Click the Map Pin buttons to select coordinates directly on the map.
               </span>
             </div>
-            <div className="flex-1 rounded-2xl overflow-hidden border border-natural-border min-h-[350px]">
+            
+            <div className="flex-1 min-h-[450px] relative overflow-hidden rounded-2xl border border-natural-border shadow-xs">
+              {mapLoading && (
+                <div className="absolute inset-0 bg-white/50 z-[1000] flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
+                </div>
+              )}
               <MapView
-                center={[startLat || 12.9716, startLng || 77.5946]}
-                zoom={12}
+                center={[startLat || 13.9299, startLng || 75.5681]}
+                zoom={14}
                 markers={getMapMarkers()}
                 polylinePoints={routeGeometryPoints}
-                interactive={false}
+                interactive={true}
+                onLocationSelect={handleMapClick}
               />
             </div>
           </div>

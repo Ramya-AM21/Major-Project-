@@ -50,6 +50,10 @@ export const VolunteerRoutes: React.FC = () => {
   // OSRM calculated route preview
   const [previewRouteGeometry, setPreviewRouteGeometry] = useState<[number, number][]>([]);
 
+  // Map pin selection state
+  const [activeMapSelect, setActiveMapSelect] = useState<'START' | 'END' | null>(null);
+  const [mapLoading, setMapLoading] = useState(false);
+
   // Fetch routes list
   const fetchRoutesList = async () => {
     try {
@@ -80,7 +84,8 @@ export const VolunteerRoutes: React.FC = () => {
             q: originSearch,
             format: 'json',
             limit: 5,
-            addressdetails: 1
+            addressdetails: 1,
+            countrycodes: 'in'
           }
         });
         setOriginSuggestions(res.data || []);
@@ -107,7 +112,8 @@ export const VolunteerRoutes: React.FC = () => {
             q: destSearch,
             format: 'json',
             limit: 5,
-            addressdetails: 1
+            addressdetails: 1,
+            countrycodes: 'in'
           }
         });
         setDestSuggestions(res.data || []);
@@ -134,6 +140,33 @@ export const VolunteerRoutes: React.FC = () => {
     setEndLng(parseFloat(suggestion.lon));
     setDestSuggestions([]);
     setDestSearch(suggestion.display_name);
+  };
+
+  const handleMapClick = async (lat: number, lng: number) => {
+    if (!activeMapSelect) return;
+    setMapLoading(true);
+    try {
+      const res = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+      const address = res.data && res.data.display_name ? res.data.display_name : `Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      
+      if (activeMapSelect === 'START') {
+        setStartName(address);
+        setOriginSearch(address);
+        setStartLat(lat);
+        setStartLng(lng);
+        setActiveMapSelect(null);
+      } else {
+        setEndName(address);
+        setDestSearch(address);
+        setEndLat(lat);
+        setEndLng(lng);
+        setActiveMapSelect(null);
+      }
+    } catch (err) {
+      console.error("Reverse geocoding failed", err);
+    } finally {
+      setMapLoading(false);
+    }
   };
 
   // OSRM route geometry calculation
@@ -276,19 +309,28 @@ export const VolunteerRoutes: React.FC = () => {
             {/* Origin Autocomplete Search Box */}
             <div className="relative">
               <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Search Origin Starting Point</label>
-              <div className="relative mt-1.5">
-                <input
-                  type="text"
-                  required
-                  value={originSearch}
-                  onChange={(e) => setOriginSearch(e.target.value)}
-                  className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
-                  placeholder="Type origin start address..."
-                />
-                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                {loadingOriginSuggestions && (
-                  <Loader2 className="w-3.5 h-3.5 text-brand-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
-                )}
+              <div className="flex gap-2 mt-1.5">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    required
+                    value={originSearch}
+                    onChange={(e) => setOriginSearch(e.target.value)}
+                    className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
+                    placeholder="Type origin start address..."
+                  />
+                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  {loadingOriginSuggestions && (
+                    <Loader2 className="w-3.5 h-3.5 text-brand-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveMapSelect(activeMapSelect === 'START' ? null : 'START')}
+                  className={`px-3 py-2 text-xs rounded-lg font-bold whitespace-nowrap border transition-colors ${activeMapSelect === 'START' ? 'bg-brand-600 text-white border-brand-600' : 'bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100'}`}
+                >
+                  <MapPin className="w-3.5 h-3.5 inline-block" /> Pin
+                </button>
               </div>
 
               {originSuggestions.length > 0 && (
@@ -309,19 +351,28 @@ export const VolunteerRoutes: React.FC = () => {
             {/* Destination Autocomplete Search Box */}
             <div className="relative">
               <label className="block text-[9px] font-black uppercase tracking-wider text-natural-muted">Search Destination Point</label>
-              <div className="relative mt-1.5">
-                <input
-                  type="text"
-                  required
-                  value={destSearch}
-                  onChange={(e) => setDestSearch(e.target.value)}
-                  className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
-                  placeholder="Type destination address..."
-                />
-                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                {loadingDestSuggestions && (
-                  <Loader2 className="w-3.5 h-3.5 text-brand-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
-                )}
+              <div className="flex gap-2 mt-1.5">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    required
+                    value={destSearch}
+                    onChange={(e) => setDestSearch(e.target.value)}
+                    className="block w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-600"
+                    placeholder="Type destination address..."
+                  />
+                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  {loadingDestSuggestions && (
+                    <Loader2 className="w-3.5 h-3.5 text-brand-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveMapSelect(activeMapSelect === 'END' ? null : 'END')}
+                  className={`px-3 py-2 text-xs rounded-lg font-bold whitespace-nowrap border transition-colors ${activeMapSelect === 'END' ? 'bg-brand-600 text-white border-brand-600' : 'bg-brand-50 border-brand-200 text-brand-700 hover:bg-brand-100'}`}
+                >
+                  <MapPin className="w-3.5 h-3.5 inline-block" /> Pin
+                </button>
               </div>
 
               {destSuggestions.length > 0 && (
@@ -449,12 +500,18 @@ export const VolunteerRoutes: React.FC = () => {
           </span>
         </div>
         <div className="flex-1 min-h-[350px] relative overflow-hidden rounded-2xl border border-natural-border">
+          {mapLoading && (
+            <div className="absolute inset-0 bg-white/50 z-[1000] flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
+            </div>
+          )}
           <MapView
             center={[startLat || 12.9716, startLng || 77.5946]}
             zoom={12}
             markers={getMapMarkers()}
             polylinePoints={previewRouteGeometry}
-            interactive={false}
+            interactive={true}
+            onLocationSelect={handleMapClick}
           />
         </div>
       </div>
