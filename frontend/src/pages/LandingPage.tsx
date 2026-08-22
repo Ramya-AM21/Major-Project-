@@ -120,7 +120,7 @@ export const LandingPage: React.FC = () => {
       </header>
 
       {/* Hero Section with premium gradient background */}
-      <div className="w-full bg-gradient-to-b from-[#FAF9F5] via-[#FAF9F5] to-[#E2ECE6] relative overflow-hidden border-b border-natural-border">
+      <div className="w-full min-h-[90vh] flex flex-col justify-center bg-gradient-to-b from-[#FAF9F5] via-[#FAF9F5] to-[#E2ECE6] relative overflow-hidden border-b border-natural-border">
         {/* Local decorative route vectors for the hero container */}
         <div className="absolute inset-0 pointer-events-none z-0">
           <svg className="absolute top-[20%] left-[10%] w-[80%] h-[60%] opacity-[0.08]" viewBox="0 0 800 400" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -128,86 +128,34 @@ export const LandingPage: React.FC = () => {
           </svg>
         </div>
 
-        <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
-          <div className="lg:col-span-6 space-y-6 text-left">
+        <section className="pt-24 pb-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto flex flex-col items-center text-center relative z-10">
+          <div className="space-y-8 flex flex-col items-center">
             <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-brand-100 border border-[#C9DAD2] text-brand-700 text-[10px] font-bold uppercase tracking-wider">
               <Route className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>COMMUTE-BASED REDISTRIBUTION SYSTEM</span>
             </span>
-            <h1 className="text-4xl sm:text-5xl font-display font-black text-natural-text tracking-tight leading-[1.08] uppercase">
+            <h1 className="text-4xl sm:text-6xl font-display font-black text-natural-text tracking-tight leading-[1.08] uppercase">
               Surplus Food.<br />
               <span className="text-brand-600 font-extrabold normal-case font-mono">Smarter Routes.</span><br />
               Greater Impact.
             </h1>
-            <p className="text-xs sm:text-sm text-natural-muted font-medium leading-relaxed max-w-lg">
+            <p className="text-sm sm:text-base text-natural-muted font-medium leading-relaxed max-w-2xl mx-auto">
               A route-aware logistics platform matching daily commuters with surplus food from restaurants, delivering directly to shelters with carbon-zero deviation.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row gap-4 pt-4 justify-center w-full sm:w-auto">
               <button
                 onClick={() => navigate(isAuthenticated ? getDashboardPath() : '/login?register=true')}
-                className="btn-primary flex items-center justify-center space-x-2 text-xs py-3 px-6"
+                className="btn-primary flex items-center justify-center space-x-2 text-sm py-4 px-8"
               >
                 <span>Start Redistributing</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
               <a
                 href="#how-it-works"
-                className="btn-secondary text-center text-xs py-3 px-6"
+                className="btn-secondary flex items-center justify-center text-center text-sm py-4 px-8"
               >
                 See How It Works
               </a>
-            </div>
-          </div>
-
-          {/* Hero Visual Mockup */}
-          <div className="lg:col-span-6 relative flex justify-center">
-            <div className="w-full max-w-md bg-white border border-natural-border rounded-2xl shadow-sm p-6 relative overflow-hidden flex flex-col justify-between z-10">
-              <div className="absolute top-0 right-0 left-0 h-1.5 bg-brand-600"></div>
-              
-              {/* Visual simulation representation of commute-matching */}
-              <div className="space-y-4 flex-1 flex flex-col justify-center">
-                <div className="bg-brand-50 border border-brand-100 p-4 rounded-xl relative text-left">
-                  <span className="absolute top-2.5 right-2.5 text-[8px] bg-brand-100 border border-brand-200 text-brand-850 px-2 py-0.5 rounded font-black uppercase tracking-wider">PROVIDER</span>
-                  <h5 className="font-bold text-xs text-natural-text">Green Bowl Kitchen</h5>
-                  <p className="text-[11px] text-natural-muted font-medium mt-1">35 meals (VEG) ready for pickup</p>
-                </div>
-
-                {/* Dotted path simulation */}
-                <div className="flex items-center space-x-3.5 px-6">
-                  <div className="h-10 w-0.5 border-l-2 border-dashed border-brand-500 relative">
-                    <div className="absolute -top-1 -left-[5px] w-2.5 h-2.5 rounded-full bg-brand-600"></div>
-                    <div className="absolute -bottom-1 -left-[5px] w-2.5 h-2.5 rounded-full bg-accent-500"></div>
-                  </div>
-                  <div className="text-left">
-                    <span className="text-[9px] text-brand-700 font-extrabold uppercase tracking-wider block">Smart Match (91% Compatibility)</span>
-                    <span className="text-[10px] text-natural-muted font-medium mt-0.5 block">+1.6 km detour range from commute path</span>
-                  </div>
-                </div>
-
-                <div className="bg-[#FAF9F5] border border-natural-border p-4 rounded-xl relative text-left">
-                  <span className="absolute top-2.5 right-2.5 text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-2 py-0.5 rounded font-black uppercase tracking-wider font-mono">VOLUNTEER ROUTE</span>
-                  <h5 className="font-bold text-xs text-natural-text">Rahul's Daily Commute</h5>
-                  <p className="text-[11px] text-natural-muted font-medium mt-1">Transit mode: Bike (Malleswaram → Cubbon Park)</p>
-                </div>
-
-                {/* Downward path */}
-                <div className="flex items-center space-x-3.5 px-6">
-                  <div className="h-10 w-0.5 border-l-2 border-dashed border-brand-500 relative">
-                    <div className="absolute -top-1 -left-[5px] w-2.5 h-2.5 rounded-full bg-accent-500"></div>
-                    <div className="absolute -bottom-1 -left-[5px] w-2.5 h-2.5 rounded-full bg-brand-600"></div>
-                  </div>
-                  <div className="text-left">
-                    <span className="text-[9px] text-brand-700 font-extrabold uppercase tracking-wider block">Redistribution Shelter Target</span>
-                    <span className="text-[10px] text-natural-muted font-medium mt-0.5 block">High demand zone at Central Shelter</span>
-                  </div>
-                </div>
-
-                <div className="bg-brand-50 border border-brand-100 p-4 rounded-xl relative text-left">
-                  <span className="absolute top-2.5 right-2.5 text-[8px] bg-brand-100 border border-brand-200 text-brand-850 px-2 py-0.5 rounded font-black uppercase tracking-wider">SHELTER</span>
-                  <h5 className="font-bold text-xs text-natural-text">Cubbon Road Shelter</h5>
-                  <p className="text-[11px] text-natural-muted font-medium mt-1">Meals expected: 35 | Capacity: 155</p>
-                </div>
-              </div>
             </div>
           </div>
         </section>
@@ -310,36 +258,6 @@ export const LandingPage: React.FC = () => {
             </div>
           </div>
 
-          {/* System Impact stats nested inside Works section */}
-          <div className="pt-12 border-t border-natural-border">
-            <div className="text-center space-y-3 mb-8">
-              <span className="inline-block bg-white border border-natural-border text-natural-muted text-[9px] px-3.5 py-1 rounded-full font-black uppercase tracking-wider shadow-xs">
-                Live Operations Snapshot
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 text-center">
-              <div className="premium-card p-6 space-y-1">
-                <h3 className="text-3xl font-mono font-black text-brand-600">{stats.activeDonations}</h3>
-                <p className="text-[10px] text-natural-muted font-bold uppercase tracking-wider">Active Listings</p>
-              </div>
-              
-              <div className="premium-card p-6 space-y-1">
-                <h3 className="text-3xl font-mono font-black text-brand-600">{stats.activeDeliveries}</h3>
-                <p className="text-[10px] text-natural-muted font-bold uppercase tracking-wider">In-Flight Transits</p>
-              </div>
-
-              <div className="premium-card p-6 space-y-1">
-                <h3 className="text-3xl font-mono font-black text-brand-600">{stats.volunteersOnline}</h3>
-                <p className="text-[10px] text-natural-muted font-bold uppercase tracking-wider">Online Volunteers</p>
-              </div>
-
-              <div className="premium-card p-6 space-y-1">
-                <h3 className="text-3xl font-mono font-black text-brand-600">{stats.totalMealsDelivered}</h3>
-                <p className="text-[10px] text-natural-muted font-bold uppercase tracking-wider">Meals Redirected</p>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
