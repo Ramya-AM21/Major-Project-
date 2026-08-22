@@ -23,6 +23,10 @@ spring:
         web-allow-others: true
   main:
     allow-bean-definition-overriding: true
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
 
 app:
   timezone: ${APP_TIMEZONE:Asia/Kolkata}

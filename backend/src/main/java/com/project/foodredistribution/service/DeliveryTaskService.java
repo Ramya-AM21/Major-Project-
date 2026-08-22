@@ -568,7 +568,7 @@ public class DeliveryTaskService {
                 "Delivery proof photo rejected",
                 "Your photo proof was rejected as a duplicate copy of another delivery evidence context. Points withheld."
             );
-            throw new IllegalArgumentException("This image signature has already been uploaded for another task!");
+            return task;
         }
 
         // 5. Geofence verification for image capture point
@@ -578,7 +578,7 @@ public class DeliveryTaskService {
         if (distanceToZoneKm > allowedDestRadiusKm) {
             task.setStatus("PHOTO_REJECTED");
             deliveryTaskRepository.save(task);
-            throw new IllegalArgumentException("Coordinate check failed: verification photo must be captured within " + (int)destinationArrivalRadiusMeters + "m radius of the shelter.");
+            return task;
         }
 
         // Save delivery proof meta node
@@ -626,7 +626,7 @@ public class DeliveryTaskService {
                 "Proof validation unavailable. Reward is pending verification."
             );
 
-            throw new IllegalArgumentException("Proof validation unavailable. Reward is pending verification.");
+            return task;
         }
 
         if (!isValid) {
@@ -647,7 +647,7 @@ public class DeliveryTaskService {
                     "Proof validation uncertain. Reward is pending verification."
                 );
 
-                throw new IllegalArgumentException("Proof validation uncertain. Reward is pending verification.");
+                return task;
             } else {
                 proof.setMlStatus("FAILED");
                 proof.setStatus("REJECTED");
@@ -664,7 +664,7 @@ public class DeliveryTaskService {
                     "ML model flagged photo evidence: " + reason + ". Points withheld."
                 );
 
-                throw new IllegalArgumentException("ML model validation failed: " + reason);
+                return task;
             }
         }
 

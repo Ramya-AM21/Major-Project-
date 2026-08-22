@@ -152,6 +152,7 @@ export const FoodDetailPage: React.FC = () => {
   const diff = new Date(listing.expiryTime).getTime() - nowTime.getTime();
   const isExpired = diff <= 0;
   const getTimerString = () => {
+    if (listing.status === 'DELIVERED' || listing.status === 'COMPLETED') return 'Delivered';
     if (isExpired) return 'Expired';
     const hours = Math.floor(diff / 3600000);
     const mins = Math.floor((diff % 3600000) / 60000);
@@ -165,11 +166,12 @@ export const FoodDetailPage: React.FC = () => {
     if (s === 'EXPIRED') return -1;
     if (s === 'CANCELLED') return -2;
     if (s === 'AVAILABLE') return 0;
-    if (s === 'MATCHED') return 1;
-    if (s === 'IN_TRANSIT') return 2;
+    if (s === 'MATCHED' || s === 'ACCEPTED') return 1;
+    if (s === 'PICKED_UP') return 2;
+    if (s === 'IN_TRANSIT') return 3;
     if (s === 'DELIVERED' || s === 'COMPLETED') {
-      if (verification?.deliveryTimestamp) return 4;
-      return 3; // Delivered but verification confidence still completing
+      if (verification?.deliveryTimestamp || s === 'COMPLETED') return 5;
+      return 4; // Delivered but verification confidence still completing
     }
     return 0;
   };
