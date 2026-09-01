@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { MapView } from '../components/MapView';
 import { 
-  Plus, Eye, XCircle, Clock, CheckCircle2, TrendingUp, AlertTriangle, Trash2
+  Plus, Eye, XCircle, Clock, CheckCircle2, TrendingUp, AlertTriangle, Trash2, MapPin, Edit3, X
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -19,7 +20,7 @@ interface FoodListing {
 }
 
 export const ProviderDashboard: React.FC = () => {
-  const { user } = useAuth();
+  const { user, providerProfile, fetchProviderProfile } = useAuth();
   const navigate = useNavigate();
   
   // Analytics State
@@ -40,6 +41,14 @@ export const ProviderDashboard: React.FC = () => {
   // Expiry Countdown trigger state
   const [nowTime, setNowTime] = useState(new Date());
 
+  // Edit Location Modal state
+  const [isEditingLocation, setIsEditingLocation] = useState(false);
+  const [editAddress, setEditAddress] = useState('');
+  const [editLat, setEditLat] = useState<number | null>(null);
+  const [editLng, setEditLng] = useState<number | null>(null);
+  const [updatingLocation, setUpdatingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
   const fetchDashboardData = async () => {
     try {
       const authHeader = `Bearer ${localStorage.getItem('token')}`;
@@ -47,7 +56,8 @@ export const ProviderDashboard: React.FC = () => {
 
       const [analyticsRes, listingsRes] = await Promise.all([
         axios.get('/api/v1/analytics/provider'),
-        axios.get('/api/v1/food/provider')
+        axios.get('/api/v1/food/provider'),
+        fetchProviderProfile()
       ]);
 
       setAnalytics(analyticsRes.data);
@@ -66,6 +76,43 @@ export const ProviderDashboard: React.FC = () => {
     const timer = setInterval(() => setNowTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (providerProfile) {
+      setEditAddress(providerProfile.address || '');
+      setEditLat(providerProfile.latitude || null);
+      setEditLng(providerProfile.longitude || null);
+    }
+  }, [providerProfile]);
+
+  const handleUpdateLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocationError(null);
+
+    if (!editAddress.trim()) {
+      setLocationError('Please provide a valid street address.');
+      return;
+    }
+    if (editLat === null || editLng === null) {
+      setLocationError('Please click on the map to set your location coordinates.');
+      return;
+    }
+
+    setUpdatingLocation(true);
+    try {
+      await axios.put('/api/v1/provider/pickup-location', {
+        address: editAddress,
+        latitude: editLat,
+        longitude: editLng
+      });
+      await fetchProviderProfile();
+      setIsEditingLocation(false);
+    } catch (err: any) {
+      setLocationError(err.response?.data?.message || 'Failed to update pickup location.');
+    } finally {
+      setUpdatingLocation(false);
+    }
+  };
 
   const handleCancelListing = async (listingId: string) => {
     if (!window.confirm("Are you sure you want to cancel this surplus listing? This action cannot be undone.")) return;
@@ -130,6 +177,44 @@ export const ProviderDashboard: React.FC = () => {
           <Plus className="w-4 h-4" />
           <span>Publish Surplus</span>
         </button>
+      </div>
+
+      {/* Registered Default Pickup Location Card */}
+      <div className="bg-white border border-natural-border rounded-2xl p-5 shadow-xs text-left space-y-3">
+        <div className="flex items-center justify-between border-b border-natural-border pb-3">
+          <div className="flex items-center space-x-2">
+            <MapPin className="w-4 h-4 text-brand-650" />
+            <h4 className="font-display font-bold text-xs uppercase tracking-wider text-natural-text">
+              Registered Pickup Location
+            </h4>
+          </div>
+          <button
+            onClick={() => setIsEditingLocation(true)}
+            className="inline-flex items-center text-[10px] font-bold text-brand-600 hover:text-brand-750 transition-colors gap-1 uppercase tracking-wider bg-brand-50 px-3 py-1 rounded-lg border border-brand-100"
+          >
+            <Edit3 className="w-3 h-3" /> Change Location
+          </button>
+        </div>
+
+        {providerProfile ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+            <div>
+              <div className="font-bold text-sm text-natural-text">{providerProfile.businessName}</div>
+              <div className="text-xs text-natural-muted font-medium mt-0.5">{providerProfile.address}</div>
+              <div className="text-[10px] font-mono font-bold text-natural-muted mt-1">
+                Lat: {providerProfile.latitude?.toFixed(5)} | Lng: {providerProfile.longitude?.toFixed(5)}
+              </div>
+            </div>
+            <div className="self-start sm:self-center shrink-0">
+              <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-50 text-brand-700 border border-brand-150">
+                <CheckCircle2 className="w-3.5 h-3.5 text-brand-650" />
+                <span>Location Confirmed</span>
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-natural-muted font-semibold">Loading registered pickup location...</div>
+        )}
       </div>
 
       {/* KPI Cards Row */}
@@ -258,6 +343,89 @@ export const ProviderDashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Edit Pickup Location Modal */}
+      {isEditingLocation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-natural-border shadow-xl w-full max-w-lg overflow-hidden text-left">
+            <div className="p-4 border-b border-natural-border flex items-center justify-between bg-[#FAF9F5]">
+              <h3 className="font-display font-bold text-xs uppercase tracking-wider text-natural-text">
+                Change Registered Pickup Location
+              </h3>
+              <button
+                onClick={() => setIsEditingLocation(false)}
+                className="p-1 text-natural-muted hover:text-natural-text rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateLocation} className="p-6 space-y-4">
+              {locationError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-750 font-semibold">
+                  {locationError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[9px] font-bold uppercase tracking-wider text-natural-muted">
+                  New Pickup Street Address
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editAddress}
+                  onChange={(e) => setEditAddress(e.target.value)}
+                  className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                  placeholder="Enter business address"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[9px] font-bold uppercase tracking-wider text-natural-muted mb-2">
+                  Pin New Location On Map
+                </label>
+                <div className="h-52 rounded-xl border border-natural-border overflow-hidden relative">
+                  <MapView
+                    center={editLat !== null && editLng !== null ? [editLat, editLng] : [12.9716, 77.5946]}
+                    zoom={12}
+                    onLocationSelect={(lat, lng) => {
+                      setEditLat(lat);
+                      setEditLng(lng);
+                      setLocationError(null);
+                    }}
+                    markers={editLat !== null && editLng !== null ? [
+                      { id: 'new-location', latitude: editLat, longitude: editLng, title: 'New Location', role: 'PROVIDER' }
+                    ] : []}
+                  />
+                </div>
+                {editLat !== null && editLng !== null && (
+                  <div className="text-[9px] text-right font-mono font-bold text-natural-muted mt-1">
+                    Lat: {editLat.toFixed(5)} | Lng: {editLng.toFixed(5)}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-natural-border">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingLocation(false)}
+                  className="btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingLocation}
+                  className="btn-primary text-xs"
+                >
+                  {updatingLocation ? 'Saving...' : 'Confirm New Location'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

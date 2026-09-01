@@ -159,6 +159,12 @@ export const CoordinatorDashboard: React.FC = () => {
     setShelterSubmitting(true);
     setShelterMessage(null);
 
+    if (!selectedFile) {
+      setShelterMessage({ type: 'error', text: 'Please select a verification proof document (PDF or Image).' });
+      setShelterSubmitting(false);
+      return;
+    }
+
     try {
       const formData = new FormData();
       formData.append("name", shelterName);
@@ -170,9 +176,7 @@ export const CoordinatorDashboard: React.FC = () => {
       formData.append("contactPhone", contactPhone);
       formData.append("latitude", latitude.toString());
       formData.append("longitude", longitude.toString());
-      if (selectedFile) {
-        formData.append("file", selectedFile);
-      }
+      formData.append("file", selectedFile);
 
       await axios.post('/api/v1/coordinator/shelters', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
@@ -673,7 +677,6 @@ export const CoordinatorDashboard: React.FC = () => {
                     Choose PDF or Image
                     <input 
                       type="file" 
-                      required
                       accept="application/pdf,image/*" 
                       className="hidden" 
                       onChange={e => e.target.files && setSelectedFile(e.target.files[0])}
@@ -688,18 +691,25 @@ export const CoordinatorDashboard: React.FC = () => {
                 </p>
               </div>
 
-              <button
-                type="submit"
-                disabled={shelterSubmitting}
-                className="w-full bg-brand-650 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-xl transition duration-200 disabled:opacity-50 flex items-center justify-center gap-1"
-              >
-                {shelterSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Submitting Shelter Info...
-                  </>
-                ) : 'Submit Shelter registration'}
-              </button>
+              <div className="pt-2 sticky bottom-0 bg-white/95 backdrop-blur-xs pb-1 border-t border-gray-100">
+                <button
+                  type="submit"
+                  disabled={shelterSubmitting}
+                  className="w-full bg-brand-650 hover:bg-brand-700 active:scale-[0.99] text-white font-bold py-3 rounded-xl transition duration-200 shadow-md disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                >
+                  {shelterSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Submitting Shelter Registration...</span>
+                    </>
+                  ) : (
+                    <>
+                      <PlusCircle className="w-4 h-4" />
+                      <span>Submit Shelter Registration</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </form>
           </div>
 

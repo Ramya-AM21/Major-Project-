@@ -1,6 +1,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 
+interface ProviderProfile {
+  id: string;
+  businessName: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  pickupAddress: string;
+  pickupLatitude: number;
+  pickupLongitude: number;
+  licenseNumber: string;
+  verificationStatus: string;
+}
+
 interface User {
   id: string;
   name: string;
@@ -12,11 +25,13 @@ interface User {
 interface AuthContextType {
   token: string | null;
   user: User | null;
+  providerProfile: ProviderProfile | null;
   isAuthenticated: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (payload: any) => Promise<void>;
   logout: () => void;
+  fetchProviderProfile: () => Promise<ProviderProfile | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,8 +39,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [providerProfile, setProviderProfile] = useState<ProviderProfile | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
+
+  const fetchProviderProfile = async (): Promise<ProviderProfile | null> => {
+    try {
+      const response = await axios.get('/api/v1/provider/profile');
+      setProviderProfile(response.data);
+      return response.data;
+    } catch (e) {
+      console.error("Failed to fetch provider profile", e);
+      return null;
+    }
+  };
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token');
@@ -37,8 +64,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
         setIsAuthenticated(true);
-        // Configure Axios default header
         axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        if (parsedUser.role === 'PROVIDER') {
+          fetchProviderProfile();
+        }
       } catch (e) {
         console.error("Failed to parse cached user options", e);
         localStorage.removeItem('token');
@@ -68,6 +97,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAuthenticated(true);
       
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      if (role === 'PROVIDER') {
+        await fetchProviderProfile();
+      }
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Login failed. Please check credentials.');
     }
@@ -93,6 +126,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsAuthenticated(true);
       
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      if (role === 'PROVIDER') {
+        await fetchProviderProfile();
+      }
     } catch (error: any) {
       throw new Error(error.response?.data?.message || 'Registration failed.');
     }
@@ -103,12 +140,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('user');
     setToken(null);
     setUser(null);
+    setProviderProfile(null);
     setIsAuthenticated(false);
     delete axios.defaults.headers.common['Authorization'];
   };
 
   return (
-    <AuthContext.Provider value={{ token, user, isAuthenticated, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ token, user, providerProfile, isAuthenticated, loading, login, register, logout, fetchProviderProfile }}>
       {children}
     </AuthContext.Provider>
   );

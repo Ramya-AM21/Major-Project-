@@ -226,7 +226,7 @@ public class VolunteerService {
                     if (zone == null && !zones.isEmpty()) {
                         zone = zones.get(0);
                     }
-                    if (zone != null && "ACTIVE".equalsIgnoreCase(zone.getStatus())) {
+                    if (zone != null && (zone.getStatus() == null || "ACTIVE".equalsIgnoreCase(zone.getStatus()))) {
                         double distanceToPickup = matchingService.calculateDistance(volunteer.getLatitude(), volunteer.getLongitude(), food.getPickupLatitude(), food.getPickupLongitude());
                         if (distanceToPickup <= maxVolToShelterLimit) {
                             VolunteerRoute virtualRoute = new VolunteerRoute();
@@ -262,12 +262,17 @@ public class VolunteerService {
                     if (zone == null && !zones.isEmpty()) {
                         zone = zones.get(0);
                     }
-                    if (zone != null && "ACTIVE".equalsIgnoreCase(zone.getStatus())) {
-                        double distanceToPickup = matchingService.calculateDistance(
+                    if (zone != null && (zone.getStatus() == null || "ACTIVE".equalsIgnoreCase(zone.getStatus()))) {
+                        double distanceToStart = matchingService.calculateDistance(
                             (route.getCurrentLatitude() != null ? route.getCurrentLatitude() : route.getStartLatitude()),
                             (route.getCurrentLongitude() != null ? route.getCurrentLongitude() : route.getStartLongitude()),
                             food.getPickupLatitude(), food.getPickupLongitude()
                         );
+                        double distanceToEnd = matchingService.calculateDistance(
+                            route.getEndLatitude(), route.getEndLongitude(),
+                            food.getPickupLatitude(), food.getPickupLongitude()
+                        );
+                        double distanceToPickup = Math.min(distanceToStart, distanceToEnd);
                         
                         if (distanceToPickup <= maxVolToShelterLimit) {
                             double deviation = matchingService.calculateRouteDeviation(route, food, zone);

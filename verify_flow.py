@@ -65,7 +65,7 @@ def test_workflow():
     
     target_zone = zones[0]
     for z in zones:
-        if "central" in z.get("name", "").lower() or "transit" in z.get("name", "").lower():
+        if "central" in z.get("name", "").lower():
             target_zone = z
             break
             
@@ -84,9 +84,6 @@ def test_workflow():
         "allergens": "None",
         "preparationTime": prep_time,
         "expiryTime": expiry_time,
-        "pickupAddress": "Vittal Mallya Road, Ashok Nagar, Bangalore",
-        "pickupLatitude": 12.9716,
-        "pickupLongitude": 77.5946,
         "destinationZone": {
             "id": target_zone["id"]
         },
@@ -116,7 +113,7 @@ def test_workflow():
     tasks, status = make_request(f"{BASE_URL}/api/v1/tasks", method="GET", headers=headers)
     if status == 200:
         for t in tasks:
-            if t["status"] not in ["COMPLETED", "CANCELLED"]:
+            if t["status"] not in ["COMPLETED", "CANCELLED"] and t.get("foodListing", {}).get("id") != listing_id:
                 print(f"   Releasing existing active task {t['id']} (status: {t['status']})...")
                 make_request(f"{BASE_URL}/api/v1/tasks/{t['id']}/cancel", method="POST", headers=headers)
 
@@ -193,8 +190,8 @@ def test_workflow():
     pickup_payload = {
         "taskId": task_id,
         "otp": pickup_otp,
-        "latitude": 12.9716,
-        "longitude": 77.5946
+        "latitude": target_match["foodListing"]["pickupLatitude"],
+        "longitude": target_match["foodListing"]["pickupLongitude"]
     }
     pickup_res, status = make_request(f"{BASE_URL}/api/v1/verification/pickup", method="POST", headers=headers, data=pickup_payload)
     if status != 200:

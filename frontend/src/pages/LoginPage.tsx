@@ -82,6 +82,10 @@ export const LoginPage: React.FC = () => {
         setStatusError('Please click on the map to set your pickup coordinates.');
         return;
       }
+      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        setStatusError('Invalid coordinates. Latitude must be -90 to +90 and Longitude must be -180 to +180.');
+        return;
+      }
     }
 
     setLoading(true);

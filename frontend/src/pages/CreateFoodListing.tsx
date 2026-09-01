@@ -6,8 +6,9 @@ import { AlertCircle, ArrowLeft, Loader2, CheckCircle2, Camera, Upload, Trash2, 
 import axios from 'axios';
 
 export const CreateFoodListing: React.FC = () => {
-  const { user } = useAuth();
+  const { user, providerProfile, fetchProviderProfile } = useAuth();
   const navigate = useNavigate();
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
   // Choice State: null | 'MANUAL' | 'AI_ASSISTED'
   const [entryMethod, setEntryMethod] = useState<'MANUAL' | 'AI_ASSISTED' | null>(null);
@@ -90,15 +91,22 @@ export const CreateFoodListing: React.FC = () => {
   };
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      const parsed = JSON.parse(storedUser);
-      if (parsed && parsed.provider) {
-        setPickupAddress(parsed.provider.address || '');
-        setLatitude(parsed.provider.latitude || null);
-        setLongitude(parsed.provider.longitude || null);
+    const loadProfileLocation = async () => {
+      setLoadingProfile(true);
+      try {
+        const prof = await fetchProviderProfile();
+        if (prof) {
+          setPickupAddress(prof.address || prof.pickupAddress || '');
+          setLatitude(prof.latitude ?? prof.pickupLatitude ?? null);
+          setLongitude(prof.longitude ?? prof.pickupLongitude ?? null);
+        }
+      } catch (e) {
+        console.error("Could not fetch provider profile location", e);
+      } finally {
+        setLoadingProfile(false);
       }
-    }
+    };
+    loadProfileLocation();
 
     const fetchZones = async () => {
       try {
@@ -1242,42 +1250,45 @@ export const CreateFoodListing: React.FC = () => {
             )}
           </div>
 
-          {/* Section 4: GPS coords pick */}
-          <div className="space-y-4 pt-4 border-t border-natural-border">
-            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">4. Pickup Geolocation</h3>
+          {/* Section 4: Registered Pickup Location */}
+          <div className="space-y-3 pt-4 border-t border-natural-border">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">4. Pickup Location</h3>
             
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted">Pickup Street Address Description</label>
-              <input
-                type="text"
-                required
-                value={pickupAddress}
-                onChange={(e) => setPickupAddress(e.target.value)}
-                className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
-                placeholder="Business suite, floor, street details"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-natural-muted mb-2">
-                Pin Location on Map Canvas (click on target area)
-              </label>
-              <div className="h-64 rounded-xl overflow-hidden border border-natural-border relative">
-                <MapView
-                  center={latitude !== null && longitude !== null ? [latitude, longitude] : [12.9716, 77.5946]}
-                  zoom={12}
-                  onLocationSelect={handleLocationSelect}
-                  markers={latitude !== null && longitude !== null ? [
-                    { id: 'selected', latitude, longitude, title: foodName || 'Pickup Location', role: 'PROVIDER' }
-                  ] : []}
-                />
+            {loadingProfile ? (
+              <div className="p-4 bg-brand-50/10 border border-brand-100 rounded-xl text-xs font-semibold text-natural-muted flex items-center space-x-2">
+                <Loader2 className="w-4 h-4 animate-spin text-brand-650" />
+                <span>Loading registered pickup location...</span>
               </div>
-              {latitude !== null && longitude !== null && (
-                <div className="text-[9px] text-right font-mono text-natural-muted mt-1.5 font-bold">
-                  Latitude: {latitude.toFixed(5)} | Longitude: {longitude.toFixed(5)}
+            ) : pickupAddress && latitude !== null && longitude !== null ? (
+              <div className="p-4 bg-brand-50/20 border border-brand-100 rounded-xl space-y-2 text-left">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-brand-850 block">Using your registered business location</span>
+                    <div className="text-xs font-bold text-natural-text mt-1">{pickupAddress}</div>
+                    <div className="text-[10px] font-mono text-natural-muted mt-0.5 font-bold">
+                      Coordinates: {latitude.toFixed(5)}, {longitude.toFixed(5)}
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-brand-50 text-brand-700 border border-brand-100 shrink-0 self-start sm:self-center">
+                    <CheckCircle2 className="w-3 h-3 text-brand-650" />
+                    <span>Automatically applied</span>
+                  </span>
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-left">
+                <div className="text-xs text-amber-800 font-bold">
+                  Pickup location is not configured. Please add your business pickup location before publishing surplus food.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/provider/dashboard')}
+                  className="btn-secondary py-1 px-3 text-[10px] uppercase font-bold"
+                >
+                  Set Pickup Location in Dashboard
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Form Actions */}

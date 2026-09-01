@@ -11,4 +11,5 @@ public interface ZoneRepository extends JpaRepository<Zone, UUID> {
     List<Zone> findByVerificationStatusAndCityIgnoreCase(String verificationStatus, String city);
     List<Zone> findByStatusAndVerificationStatusAndCityIgnoreCase(String status, String verificationStatus, String city);
     List<Zone> findByCityIgnoreCase(String city);
+    java.util.Optional<Zone> findByNameIgnoreCaseAndCityIgnoreCase(String name, String city);
 }

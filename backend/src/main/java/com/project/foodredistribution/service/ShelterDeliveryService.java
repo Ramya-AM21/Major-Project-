@@ -3,6 +3,8 @@ package com.project.foodredistribution.service;
 import com.project.foodredistribution.entity.*;
 import com.project.foodredistribution.exception.ResourceNotFoundException;
 import com.project.foodredistribution.repository.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,9 +23,11 @@ public class ShelterDeliveryService {
     private final DeliveryAssignmentRepository deliveryAssignmentRepository;
     private final UserRepository userRepository;
     private final VolunteerRepository volunteerRepository;
+    private final ZoneRepository zoneRepository;
     private final MatchingService matchingService;
     private final AuditLogService auditLogService;
     private final NotificationService notificationService;
+    private final Logger logger = LoggerFactory.getLogger(ShelterDeliveryService.class);
 
     @Value("${app.delivery.geofence-radius-meters:100.0}")
     private double geofenceRadiusMeters;
@@ -33,6 +37,7 @@ public class ShelterDeliveryService {
                                   DeliveryAssignmentRepository deliveryAssignmentRepository,
                                   UserRepository userRepository,
                                   VolunteerRepository volunteerRepository,
+                                  ZoneRepository zoneRepository,
                                   MatchingService matchingService,
                                   AuditLogService auditLogService,
                                   NotificationService notificationService) {
@@ -41,6 +46,7 @@ public class ShelterDeliveryService {
         this.deliveryAssignmentRepository = deliveryAssignmentRepository;
         this.userRepository = userRepository;
         this.volunteerRepository = volunteerRepository;
+        this.zoneRepository = zoneRepository;
         this.matchingService = matchingService;
         this.auditLogService = auditLogService;
         this.notificationService = notificationService;
@@ -90,17 +96,115 @@ public class ShelterDeliveryService {
     }
 
     public List<Shelter> getPendingShelters() {
-        return shelterRepository.findByVerificationStatus("PENDING_VERIFICATION");
+        List<Shelter> list = shelterRepository.findByVerificationStatus("PENDING_VERIFICATION");
+        List<Shelter> realList = new ArrayList<>();
+        for (Shelter s : list) {
+            if (s.getName() != null && s.getName().matches(".*\\d{9,}.*")) {
+                continue;
+            }
+            if (s.getCoordinator() != null && s.getCoordinator().getEmail() != null &&
+                    s.getCoordinator().getEmail().matches(".*coordinator_\\d{9,}.*")) {
+                continue;
+            }
+            realList.add(s);
+        }
+        return realList;
+    }
+
+    public Map<String, Object> getShelterDocumentFile(UUID shelterId) throws IOException {
+        Shelter shelter = shelterRepository.findById(shelterId)
+                .orElseThrow(() -> new ResourceNotFoundException("Shelter not found: " + shelterId));
+        if (shelter.getDocumentUrl() == null || shelter.getDocumentUrl().trim().isEmpty()) {
+            throw new ResourceNotFoundException("No document attached to shelter: " + shelterId);
+        }
+        String relativePath = shelter.getDocumentUrl();
+        if (relativePath.startsWith("/")) {
+            relativePath = relativePath.substring(1);
+        }
+        File file = new File(relativePath);
+        if (!file.exists() || !file.isFile()) {
+            throw new ResourceNotFoundException("Uploaded file does not exist on disk: " + relativePath);
+        }
+        byte[] bytes = Files.readAllBytes(file.toPath());
+        String contentType = Files.probeContentType(file.toPath());
+        if (contentType == null) {
+            if (file.getName().toLowerCase().endsWith(".png")) contentType = "image/png";
+            else if (file.getName().toLowerCase().endsWith(".jpg") || file.getName().toLowerCase().endsWith(".jpeg")) contentType = "image/jpeg";
+            else if (file.getName().toLowerCase().endsWith(".pdf")) contentType = "application/pdf";
+            else contentType = "application/octet-stream";
+        }
+        Map<String, Object> result = new HashMap<>();
+        result.put("bytes", bytes);
+        result.put("contentType", contentType);
+        result.put("filename", file.getName());
+        return result;
     }
 
     @Transactional
     public Shelter verifyShelter(UUID shelterId, String adminEmail) {
+        logger.info("APPROVAL START - Submission ID: {}", shelterId);
         Shelter shelter = shelterRepository.findById(shelterId)
-                .orElseThrow(() -> new ResourceNotFoundException("Shelter not found: " + shelterId));
+                .orElseThrow(() -> new ResourceNotFoundException("Shelter submission not found: " + shelterId));
 
+        logger.info("SUBMISSION FOUND - Name: {}, Current Status: {}", shelter.getName(), shelter.getVerificationStatus());
+
+        if ("VERIFIED".equalsIgnoreCase(shelter.getVerificationStatus())) {
+            logger.warn("APPROVAL REJECTED - Submission {} has already been approved.", shelterId);
+            throw new IllegalStateException("Shelter submission has already been approved.");
+        }
+
+        if ("REJECTED".equalsIgnoreCase(shelter.getVerificationStatus())) {
+            logger.warn("APPROVAL REJECTED - Submission {} was previously rejected.", shelterId);
+            throw new IllegalStateException("Cannot approve a rejected shelter submission.");
+        }
+
+        // Validate coordinates
+        if (shelter.getLatitude() == null || shelter.getLongitude() == null ||
+                shelter.getLatitude() < -90.0 || shelter.getLatitude() > 90.0 ||
+                shelter.getLongitude() < -180.0 || shelter.getLongitude() > 180.0) {
+            throw new IllegalArgumentException("Invalid shelter GPS coordinates for approval.");
+        }
+
+        // Update Shelter Verification Status
         shelter.setVerificationStatus("VERIFIED");
         shelter.setUpdatedAt(LocalDateTime.now());
-        Shelter saved = shelterRepository.save(shelter);
+        Shelter savedShelter = shelterRepository.save(shelter);
+        logger.info("SUBMISSION STATUS UPDATED - Status: VERIFIED");
+
+        // Sync/Persist to Shelter Zone database table
+        logger.info("CREATING/UPDATING SHELTER ZONE IN DATABASE...");
+        Optional<Zone> existingZoneOpt = zoneRepository.findByNameIgnoreCaseAndCityIgnoreCase(shelter.getName(), shelter.getCity());
+        Zone zone;
+        if (existingZoneOpt.isPresent()) {
+            zone = existingZoneOpt.get();
+            logger.info("EXISTING ZONE FOUND - Updating Zone ID: {}", zone.getId());
+        } else {
+            zone = new Zone();
+            zone.setCreatedAt(LocalDateTime.now());
+        }
+
+        zone.setName(shelter.getName());
+        zone.setLatitude(shelter.getLatitude());
+        zone.setLongitude(shelter.getLongitude());
+        zone.setAddress(shelter.getAddress() + (shelter.getArea() != null ? ", " + shelter.getArea() : "") + (shelter.getCity() != null ? ", " + shelter.getCity() : ""));
+        zone.setCity(shelter.getCity() != null ? shelter.getCity() : "Bengaluru");
+        zone.setState("Karnataka");
+        zone.setCountry("India");
+        zone.setCapacity(200);
+        zone.setStatus("ACTIVE");
+        zone.setVerificationStatus("VERIFIED");
+        zone.setType(shelter.getShelterType() != null ? shelter.getShelterType() : "VERIFIED_SHELTER");
+        zone.setSource("VERIFIED_COORDINATOR");
+        zone.setEvidenceUrl(shelter.getDocumentUrl());
+        zone.setReportedBy(shelter.getCoordinator());
+        zone.setPriorityScore(1.0);
+        zone.setLastVerifiedAt(LocalDateTime.now());
+        zone.setValidFrom(LocalDateTime.now());
+        zone.setValidUntil(LocalDateTime.now().plusDays(30));
+        zone.setUpdatedAt(LocalDateTime.now());
+
+        Zone savedZone = zoneRepository.save(zone);
+        logger.info("SHELTER ZONE SAVED IN DATABASE - Zone ID: {}, Status: ACTIVE, Coordinates: {}, {}", savedZone.getId(), savedZone.getLatitude(), savedZone.getLongitude());
 
         // Auto verify associated requirements
         List<FoodRequirement> requirements = foodRequirementRepository.findByStatus("PENDING_VERIFICATION");
@@ -111,9 +215,10 @@ public class ShelterDeliveryService {
             }
         }
 
-        auditLogService.log(adminEmail, "ADMIN", "SHELTER_VERIFIED", "Shelter", shelterId.toString(), "Shelter and associated requirements verified by Admin");
-        notificationService.sendNotification(shelter.getCoordinator().getEmail(), "Shelter Verified! ", "Your shelter " + shelter.getName() + " has been verified.");
-        return saved;
+        auditLogService.log(adminEmail, "ADMIN", "SHELTER_VERIFIED", "Shelter", shelterId.toString(), "Shelter and Zone verified by Admin. Created Zone ID: " + savedZone.getId());
+        notificationService.sendNotification(shelter.getCoordinator().getEmail(), "Shelter Verified! ", "Your shelter " + shelter.getName() + " has been verified and activated on the map.");
+        logger.info("APPROVAL COMPLETE - Submission ID: {}, Zone ID: {}", shelterId, savedZone.getId());
+        return savedShelter;
     }
 
     @Transactional

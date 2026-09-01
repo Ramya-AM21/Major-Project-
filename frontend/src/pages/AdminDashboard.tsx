@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { MapView } from '../components/MapView';
 import { 
-  AlertTriangle, Check, ShieldAlert, BarChart3, Settings, MapPin, Loader2, Bot, HelpCircle
+  AlertTriangle, Check, ShieldAlert, BarChart3, Settings, MapPin, Loader2, Bot, HelpCircle,
+  X, Eye, RefreshCw, ExternalLink
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -33,8 +34,8 @@ export const AdminDashboard: React.FC = () => {
     highPriorityZones: 0,
     completedToday: 0,
     suspiciousEvents: 0,
-    totalKgSaved: 0.1,
-    totalMealsDelivered: 0.1
+    totalKgSaved: 0,
+    totalMealsDelivered: 0
   });
 
   const [loading, setLoading] = useState(true);
@@ -55,6 +56,19 @@ export const AdminDashboard: React.FC = () => {
   const [sheltersLoading, setSheltersLoading] = useState(true);
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectingShelterId, setRejectingShelterId] = useState<string | null>(null);
+
+  // Full-screen Image Viewer modal states
+  const [modalDocUrl, setModalDocUrl] = useState<string | null>(null);
+  const [modalTitle, setModalTitle] = useState<string>('');
+  const [imgLoading, setImgLoading] = useState<boolean>(true);
+  const [imgError, setImgError] = useState<boolean>(false);
+
+  const openImageModal = (url: string, title: string) => {
+    setModalDocUrl(url);
+    setModalTitle(title);
+    setImgLoading(true);
+    setImgError(false);
+  };
 
   const fetchAdminConsole = async () => {
     try {
@@ -139,13 +153,20 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const [shelterFeedback, setShelterFeedback] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
   const handleVerifyShelter = async (id: string) => {
+    setShelterFeedback(null);
+    // Optimistic removal for real-time responsiveness
+    setPendingShelters(prev => prev.filter(s => s.id !== id));
     try {
       await axios.post(`/api/v1/admin/shelters/${id}/verify`);
-      alert("Shelter verification approved!");
-      fetchAdminConsole();
-    } catch {
-      alert("Failed to verify shelter.");
+      setShelterFeedback({ type: 'success', text: 'Shelter verification approved! Shelter zone is now ACTIVE on the map.' });
+      await fetchAdminConsole();
+    } catch (error: any) {
+      const errMsg = error.response?.data?.message || 'Failed to verify shelter.';
+      setShelterFeedback({ type: 'error', text: errMsg });
+      await fetchAdminConsole();
     }
   };
 
@@ -154,14 +175,18 @@ export const AdminDashboard: React.FC = () => {
       alert("Please provide a rejection reason.");
       return;
     }
+    setShelterFeedback(null);
+    setPendingShelters(prev => prev.filter(s => s.id !== id));
     try {
       await axios.post(`/api/v1/admin/shelters/${id}/reject`, { reason: rejectionReason });
-      alert("Shelter verification rejected.");
+      setShelterFeedback({ type: 'success', text: 'Shelter verification rejected.' });
       setRejectionReason('');
       setRejectingShelterId(null);
-      fetchAdminConsole();
-    } catch {
-      alert("Failed to reject shelter.");
+      await fetchAdminConsole();
+    } catch (error: any) {
+      const errMsg = error.response?.data?.message || 'Failed to reject shelter.';
+      setShelterFeedback({ type: 'error', text: errMsg });
+      await fetchAdminConsole();
     }
   };
 
@@ -438,6 +463,14 @@ export const AdminDashboard: React.FC = () => {
               <p className="text-xs text-natural-muted mt-1 font-semibold">Review coordinator applications, verify geotags, examine legal files, and approve or reject.</p>
             </div>
 
+            {shelterFeedback && (
+              <div className={`p-4 rounded-xl text-xs font-bold border ${
+                shelterFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'
+              }`}>
+                {shelterFeedback.text}
+              </div>
+            )}
+
             {sheltersLoading ? (
               <div className="p-8 text-center text-natural-muted font-semibold text-xs">Loading pending shelters...</div>
             ) : pendingShelters.length === 0 ? (
@@ -483,16 +516,45 @@ export const AdminDashboard: React.FC = () => {
                         </div>
 
                         {shelter.documentUrl && (
-                          <div className="pt-2">
-                            <span className="block text-[8px] uppercase font-bold tracking-wider text-gray-400 mb-1">Authorization Proof</span>
-                            <a 
-                              href={shelter.documentUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg text-xs font-semibold transition"
+                          <div className="pt-2 space-y-2">
+                            <span className="block text-[8px] uppercase font-bold tracking-wider text-gray-400">Authorization Proof Document</span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button 
+                                onClick={() => openImageModal(`/api/v1/admin/shelters/${shelter.id}/document`, shelter.name)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg text-xs font-semibold transition"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>View Proof Image / Document</span>
+                              </button>
+                              <a 
+                                href={`/api/v1/admin/shelters/${shelter.id}/document`} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-lg text-xs font-medium transition"
+                                title="Open binary stream in new tab"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>Direct Link</span>
+                              </a>
+                            </div>
+                            
+                            {/* Inline Thumbnail Box */}
+                            <div 
+                              onClick={() => openImageModal(`/api/v1/admin/shelters/${shelter.id}/document`, shelter.name)}
+                              className="cursor-pointer border border-gray-200 rounded-xl overflow-hidden relative group max-w-xs bg-gray-50 h-32 flex items-center justify-center shadow-xs"
                             >
-                              View Uploaded Proof Document ↗
-                            </a>
+                              <img 
+                                src={`/api/v1/admin/shelters/${shelter.id}/document`} 
+                                alt="Authorization Proof Document" 
+                                className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = shelter.documentUrl;
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-semibold gap-1.5">
+                                <Eye className="w-4 h-4" /> Expand Preview
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -620,6 +682,82 @@ export const AdminDashboard: React.FC = () => {
 
             <div className="p-3 bg-[#FAF9F5] border border-natural-border rounded-xl text-[9px] text-[#244F3C] font-semibold leading-normal">
               <strong>Evidence audit:</strong> Platform administrators are advised to manually evaluate flagged route deviations and images prior to blocking volunteer accounts.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full-Screen Image Viewer Modal */}
+      {modalDocUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl border border-natural-border shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-natural-border flex items-center justify-between bg-[#FAF9F5]">
+              <div>
+                <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">
+                  Verification Image Preview — {modalTitle}
+                </h3>
+                <span className="text-[10px] text-gray-400 font-mono">{modalDocUrl}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={modalDocUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 text-gray-600 hover:text-brand-650 rounded-lg border border-gray-200 bg-white text-xs flex items-center gap-1 font-semibold"
+                  title="Open in new tab"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open Original</span>
+                </a>
+                <button
+                  onClick={() => setModalDocUrl(null)}
+                  className="p-1.5 text-natural-muted hover:text-natural-text rounded-lg border border-gray-200 bg-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-auto flex-1 flex flex-col items-center justify-center min-h-[300px] bg-gray-900/5 relative">
+              {imgLoading && (
+                <div className="flex flex-col items-center justify-center text-natural-muted space-y-2 py-12">
+                  <Loader2 className="w-8 h-8 text-brand-650 animate-spin" />
+                  <span className="text-xs font-semibold">Loading verification image...</span>
+                </div>
+              )}
+
+              {imgError && (
+                <div className="flex flex-col items-center justify-center text-rose-700 bg-rose-50 border border-rose-200 p-8 rounded-2xl max-w-md text-center space-y-3">
+                  <AlertTriangle className="w-10 h-10 text-rose-600" />
+                  <div>
+                    <h4 className="font-bold text-sm">Unable to load verification image.</h4>
+                    <p className="text-xs text-rose-600 mt-1">The image reference could not be fetched or the file format is unsupported.</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setImgError(false);
+                      setImgLoading(true);
+                    }}
+                    className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              <img
+                src={modalDocUrl}
+                alt="Verification Proof"
+                onLoad={() => setImgLoading(false)}
+                onError={() => {
+                  setImgLoading(false);
+                  setImgError(true);
+                }}
+                className={`max-h-[70vh] max-w-full object-contain rounded-xl shadow-md border border-gray-200 transition-opacity duration-200 ${
+                  imgLoading || imgError ? 'hidden' : 'block'
+                }`}
+              />
             </div>
           </div>
         </div>

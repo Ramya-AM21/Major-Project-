@@ -127,6 +127,17 @@ public class ShelterDeliveryController {
         return ResponseEntity.ok(shelters);
     }
 
+    @GetMapping("/admin/shelters/{id}/document")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('COORDINATOR')")
+    public ResponseEntity<byte[]> getShelterDocument(@PathVariable UUID id) throws IOException {
+        Map<String, Object> doc = shelterDeliveryService.getShelterDocumentFile(id);
+        byte[] bytes = (byte[]) doc.get("bytes");
+        String contentType = (String) doc.get("contentType");
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, contentType)
+                .body(bytes);
+    }
+
     @PostMapping("/admin/shelters/{id}/verify")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Shelter> verifyShelter(@PathVariable UUID id, Principal principal) {

@@ -157,6 +157,11 @@ public class FoodListingService {
             foodListing.setPickupLongitude(provider.getLongitude());
         }
 
+        if (foodListing.getPickupAddress() == null || foodListing.getPickupAddress().trim().isEmpty() ||
+            foodListing.getPickupLatitude() == null || foodListing.getPickupLongitude() == null) {
+            throw new IllegalArgumentException("Provider pickup location is not configured. Please set your pickup location before publishing surplus food.");
+        }
+
         // Validate Coordinates range
         if (foodListing.getPickupLatitude() < -90.0 || foodListing.getPickupLatitude() > 90.0 ||
             foodListing.getPickupLongitude() < -180.0 || foodListing.getPickupLongitude() > 180.0) {

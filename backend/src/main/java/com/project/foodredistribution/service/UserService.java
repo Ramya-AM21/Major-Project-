@@ -63,11 +63,27 @@ public class UserService {
         user = userRepository.save(user);
 
         if (request.getRole() == Role.PROVIDER) {
-            String businessName = request.getBusinessName() != null ? request.getBusinessName() : request.getName();
-            String address = request.getAddress() != null ? request.getAddress() : "Default Address";
-            Double lat = request.getLatitude() != null ? request.getLatitude() : 12.9716;
-            Double lng = request.getLongitude() != null ? request.getLongitude() : 77.5946;
-            FoodProvider provider = new FoodProvider(user, businessName, address, lat, lng, request.getLicenseNumber());
+            String businessName = request.getBusinessName() != null && !request.getBusinessName().trim().isEmpty()
+                    ? request.getBusinessName().trim()
+                    : request.getName();
+            String address = request.getAddress();
+            Double lat = request.getLatitude();
+            Double lng = request.getLongitude();
+
+            if (address == null || address.trim().isEmpty()) {
+                throw new IllegalArgumentException("Provider pickup location address is required for registration");
+            }
+            if (lat == null || lng == null) {
+                throw new IllegalArgumentException("Provider pickup coordinates (latitude and longitude) are required for registration");
+            }
+            if (lat < -90.0 || lat > 90.0) {
+                throw new IllegalArgumentException("Latitude must be between -90 and +90 degrees");
+            }
+            if (lng < -180.0 || lng > 180.0) {
+                throw new IllegalArgumentException("Longitude must be between -180 and +180 degrees");
+            }
+
+            FoodProvider provider = new FoodProvider(user, businessName, address.trim(), lat, lng, request.getLicenseNumber());
             foodProviderRepository.save(provider);
         } else if (request.getRole() == Role.VOLUNTEER) {
             Volunteer volunteer = new Volunteer(user);
