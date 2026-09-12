@@ -3,6 +3,7 @@ package com.project.foodredistribution.service;
 import com.project.foodredistribution.entity.*;
 import com.project.foodredistribution.exception.ResourceNotFoundException;
 import com.project.foodredistribution.repository.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +42,9 @@ public class DeliveryTaskService {
 
     @org.springframework.beans.factory.annotation.Value("${app.matching.gps-accuracy-threshold-meters:50.0}")
     private double gpsAccuracyThresholdMeters;
+
+    @Autowired
+    private FraudDetectionService fraudDetectionService;
 
     public DeliveryTaskService(DeliveryTaskRepository deliveryTaskRepository,
                                FoodListingRepository foodListingRepository,
@@ -596,6 +600,36 @@ public class DeliveryTaskService {
         
         // Log start
         auditLogService.log(task.getVolunteer().getUser().getEmail(), "VOLUNTEER", "ML_VALIDATION_STARTED", "DeliveryTask", taskId.toString(), "Triggering ML anomaly analytics");
+
+        // Run Hybrid ML Fraud Detection Service
+        com.project.foodredistribution.entity.FraudRiskAssessment fraudAssessment = null;
+        try {
+            if (fraudDetectionService != null) {
+                fraudAssessment = fraudDetectionService.evaluateDeliveryTask(task, imageBytes, filename, latitude, longitude, accuracy);
+            }
+        } catch (Exception ex) {
+            log.warn("Fraud detection evaluation exception: {}", ex.getMessage());
+        }
+
+        if (fraudAssessment != null && ("HIGH".equalsIgnoreCase(fraudAssessment.getRiskLevel()) || "MEDIUM".equalsIgnoreCase(fraudAssessment.getRiskLevel()))) {
+            proof.setMlStatus("FLAGGED_FRAUD");
+            proof.setStatus("PENDING");
+            proof.setMlReason("Fraud Risk Score: " + fraudAssessment.getRiskScore() + " (" + fraudAssessment.getRiskLevel() + ")");
+            deliveryProofRepository.save(proof);
+
+            task.setStatus("PENDING_VERIFICATION");
+            deliveryTaskRepository.save(task);
+
+            auditLogService.log(task.getVolunteer().getUser().getEmail(), "VOLUNTEER", "FRAUD_DETECTION_FLAGGED", "DeliveryTask", taskId.toString(), "Fraud detection flagged task with risk score " + fraudAssessment.getRiskScore());
+
+            notificationService.sendNotification(
+                task.getVolunteer().getUser().getEmail(),
+                "Security Audit Pending",
+                "Your delivery proof has been queued for security review. Payout on hold."
+            );
+
+            return task;
+        }
 
         // Invoke FastAPI ML Model Service
         Map<String, Object> mlResult = aiIntegrationService.validateDeliveryProof(taskId, imageBytes, filename, latitude, longitude);

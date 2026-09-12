@@ -511,9 +511,9 @@ public class FoodListingService {
         // FastAPI returns: food_items: [{ name: "Medu Wada", confidence: 0.98 }, ...]
         if (aiSuccess && aiResult.get("food_items") instanceof java.util.List) {
             java.util.List<?> foodItemsList = (java.util.List<?>) aiResult.get("food_items");
-            java.util.Map<String, Object> extractedDetails = new java.util.HashMap<>();
-            extractedDetails.put("foodItems", foodItemsList);
-            result.put("extractedDetails", extractedDetails);
+            java.util.Map<String, Object> fDetails = new java.util.HashMap<>();
+            fDetails.put("foodItems", foodItemsList);
+            result.put("extractedDetails", fDetails);
         } else if (aiSuccess && aiResult.get("extractedDetails") != null) {
             result.put("extractedDetails", aiResult.get("extractedDetails"));
         }

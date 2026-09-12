@@ -143,6 +143,16 @@ public class VolunteerService {
     @Transactional
     public VolunteerRoute addRoute(VolunteerRoute route, String email) {
         Volunteer volunteer = getVolunteerByEmail(email);
+        if (route.getStatus() == null || "ACTIVE".equalsIgnoreCase(route.getStatus())) {
+            List<VolunteerRoute> existingRoutes = volunteerRouteRepository.findByVolunteerId(volunteer.getId());
+            for (VolunteerRoute r : existingRoutes) {
+                if ("ACTIVE".equalsIgnoreCase(r.getStatus())) {
+                    r.setStatus("INACTIVE");
+                    volunteerRouteRepository.save(r);
+                }
+            }
+            route.setStatus("ACTIVE");
+        }
         route.setVolunteer(volunteer);
         return volunteerRouteRepository.save(route);
     }
@@ -255,7 +265,7 @@ public class VolunteerService {
                 }
             }
         } else {
-            List<TaskMatchRecommendation> candidates = new ArrayList<>();
+            java.util.Map<UUID, TaskMatchRecommendation> bestCandidatePerFood = new java.util.HashMap<>();
             for (VolunteerRoute route : activeRoutes) {
                 for (FoodListing food : validListings) {
                     Zone zone = food.getDestinationZone();
@@ -282,7 +292,10 @@ public class VolunteerService {
                                 TaskMatchRecommendation rec = matchingService.getRealTimeMatchDetail(volunteer, route, food, zone, false);
                                 if (rec.getDistanceToRoute() <= maxDev) {
                                     if (rec.getIsAhead() || rec.getDistanceToVolunteer() <= 1.0) {
-                                        candidates.add(rec);
+                                        UUID foodId = food.getId();
+                                        if (!bestCandidatePerFood.containsKey(foodId) || rec.getMatchingScore() > bestCandidatePerFood.get(foodId).getMatchingScore()) {
+                                            bestCandidatePerFood.put(foodId, rec);
+                                        }
                                     }
                                 }
                             }
@@ -291,6 +304,7 @@ public class VolunteerService {
                 }
             }
 
+            List<TaskMatchRecommendation> candidates = new ArrayList<>(bestCandidatePerFood.values());
             candidates.sort(Comparator.comparingDouble(TaskMatchRecommendation::getMatchingScore).reversed());
 
             List<TaskMatchRecommendation> shortlist = candidates.subList(0, Math.min(5, candidates.size()));

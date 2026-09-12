@@ -6,6 +6,7 @@ import {
   X, Eye, RefreshCw, ExternalLink
 } from 'lucide-react';
 import axios from 'axios';
+import { FraudReviewTab } from '../components/admin/FraudReviewTab';
 
 interface AnomalyEvent {
   taskId: string;
@@ -636,55 +637,7 @@ export const AdminDashboard: React.FC = () => {
       )}
 
       {path === '/admin/anomalies' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Right side: Isolation Forest Anomaly dashboard */}
-          <div className="bg-white border border-natural-border rounded-2xl p-5 shadow-xs flex flex-col text-left space-y-4 h-fit">
-            <div className="border-b border-natural-border pb-3 flex justify-between items-center bg-white">
-              <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Platform Alerts</h3>
-              <span className="text-[9px] bg-red-50 border border-red-200 text-red-750 px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider font-mono">
-                Isolation Forest
-              </span>
-            </div>
-
-            <div className="space-y-4 flex-1 bg-white">
-              {anomalies.length === 0 && (
-                <div className="p-8 text-center text-natural-muted font-semibold text-xs border border-dashed border-natural-border rounded-xl">
-                  No anomalies require review at the moment.
-                </div>
-              )}
-              {anomalies.map((anom) => (
-                <div key={anom.taskId} className="bg-red-50/10 border border-red-200 p-3 rounded-xl text-xs space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-natural-text">{anom.volunteerName}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border ${
-                      anom.risk === 'HIGH RISK' ? 'bg-red-100 text-red-800 border-red-200' : 'bg-amber-55/60 text-amber-800 border-amber-200'
-                    }`}>
-                      {anom.risk}
-                    </span>
-                  </div>
-                  <p className="text-[10.5px] text-natural-text font-semibold leading-normal">
-                    Reason: {anom.reason}
-                  </p>
-                  <div className="flex justify-between items-center text-[10px] text-natural-muted border-t border-natural-border pt-2 font-semibold font-mono">
-                    <span>Task ID: {anom.taskId}</span>
-                    <button 
-                      onClick={() => {
-                        alert(`Opening details for Task ${anom.taskId}. Admin reviews will bypass locks.`);
-                      }}
-                      className="text-brand-600 hover:text-brand-750 font-black hover:underline"
-                    >
-                      Investigate
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="p-3 bg-[#FAF9F5] border border-natural-border rounded-xl text-[9px] text-[#244F3C] font-semibold leading-normal">
-              <strong>Evidence audit:</strong> Platform administrators are advised to manually evaluate flagged route deviations and images prior to blocking volunteer accounts.
-            </div>
-          </div>
-        </div>
+        <FraudReviewTab onOpenImageModal={openImageModal} />
       )}
 
       {/* Full-Screen Image Viewer Modal */}

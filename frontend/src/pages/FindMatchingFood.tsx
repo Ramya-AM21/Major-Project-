@@ -307,7 +307,16 @@ export const FindMatchingFood: React.FC = () => {
     setLoadingMatches(true);
     try {
       const res = await axios.get('/api/v1/volunteers/matching');
-      setMatches(res.data || []);
+      const rawMatches: MatchRecommendation[] = res.data || [];
+      const uniqueMap = new Map<string, MatchRecommendation>();
+      rawMatches.forEach(m => {
+        const existing = uniqueMap.get(m.foodListing.id);
+        if (!existing || m.matchingScore > existing.matchingScore) {
+          uniqueMap.set(m.foodListing.id, m);
+        }
+      });
+      const sorted = Array.from(uniqueMap.values()).sort((a, b) => b.matchingScore - a.matchingScore);
+      setMatches(sorted);
     } catch (err: any) {
       setErrorStatus("Failed to query route matching database.");
     } finally {

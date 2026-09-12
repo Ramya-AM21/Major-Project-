@@ -942,13 +942,81 @@ async def analyze_food(image: UploadFile = File(...)):
 
         "warnings": [
             "No recognizable food could be identified."
-        ],
-
-        "message": (
-            "Unable to reliably identify food "
-            "from the uploaded image."
-        )
+        ]
     }
+
+# ---------------------------------------------------------
+# FRAUD DETECTION MODULE ENDPOINT
+# ---------------------------------------------------------
+from app.services.fraud_detector import evaluate_fraud_risk
+
+@app.post("/api/v1/ai/detect-fraud")
+async def detect_fraud_endpoint(
+    image: UploadFile = File(None),
+    taskId: str = Form(""),
+    volunteerId: str = Form(""),
+    latitude: float = Form(0.0),
+    longitude: float = Form(0.0),
+    accuracy: float = Form(0.0),
+    pickupLatitude: float = Form(0.0),
+    pickupLongitude: float = Form(0.0),
+    destinationLatitude: float = Form(0.0),
+    destinationLongitude: float = Form(0.0),
+    expectedDurationMinutes: float = Form(30.0),
+    actualDurationMinutes: float = Form(30.0),
+    expectedDistanceKm: float = Form(5.0),
+    actualDistanceKm: float = Form(5.0),
+    otpFailures: int = Form(0),
+    cancellationRate: float = Form(0.0),
+    gpsMismatchRate: float = Form(0.0),
+    proofVerificationFailures: int = Form(0),
+    previousSuspiciousEvents: int = Form(0),
+    completedDeliveries: int = Form(10),
+    cancelledDeliveries: int = Form(0),
+    previousProofHashesJson: str = Form("[]")
+):
+    """
+    Production ML-Based Fraud Detection Endpoint.
+    Combines Isolation Forest anomaly detection, Perceptual Image Hashing, OCR, Haversine GPS distance,
+    Route deviation, and Time anomaly metrics into a transparent Fraud Risk Score (0-100).
+    """
+    image_bytes = b""
+    if image is not None:
+        image_bytes = await image.read()
+
+    prev_hashes = []
+    if previousProofHashesJson:
+        try:
+            prev_hashes = json.loads(previousProofHashesJson)
+        except Exception:
+            prev_hashes = []
+
+    res = evaluate_fraud_risk(
+        image_bytes=image_bytes,
+        task_id=taskId,
+        volunteer_id=volunteerId,
+        capture_lat=latitude,
+        capture_lng=longitude,
+        gps_accuracy=accuracy,
+        pickup_lat=pickupLatitude,
+        pickup_lng=pickupLongitude,
+        dest_lat=destinationLatitude,
+        dest_lng=destinationLongitude,
+        expected_duration_mins=expectedDurationMinutes,
+        actual_duration_mins=actualDurationMinutes,
+        expected_distance_km=expectedDistanceKm,
+        actual_distance_km=actualDistanceKm,
+        otp_failures=otpFailures,
+        cancellation_rate=cancellationRate,
+        gps_mismatch_rate=gpsMismatchRate,
+        proof_verification_failures=proofVerificationFailures,
+        previous_suspicious_events=previousSuspiciousEvents,
+        completed_deliveries=completedDeliveries,
+        cancelled_deliveries=cancelledDeliveries,
+        previous_proof_hashes=prev_hashes
+    )
+
+    return res
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8002)
