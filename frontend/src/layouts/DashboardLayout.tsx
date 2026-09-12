@@ -122,6 +122,11 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
           { label: 'Listings', path: '/provider/food', icon: <Utensils className="w-5 h-5" /> },
           { label: 'Add Surplus', path: '/provider/food/new', icon: <MapPin className="w-5 h-5" /> },
         ];
+      case 'INDIVIDUAL_DONOR':
+        return [
+          { label: 'Donor Dashboard', path: '/donor/dashboard', icon: <BarChart3 className="w-5 h-5" /> },
+          { label: 'Donate Food', path: '/donor/donate', icon: <Utensils className="w-5 h-5" /> },
+        ];
       case 'VOLUNTEER':
         return [
           { label: 'Dashboard', path: '/volunteer/dashboard', icon: <Truck className="w-5 h-5" /> },

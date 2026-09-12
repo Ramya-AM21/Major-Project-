@@ -22,7 +22,7 @@ public class FoodListingController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('PROVIDER')")
+    @PreAuthorize("hasAnyRole('PROVIDER', 'INDIVIDUAL_DONOR')")
     public ResponseEntity<FoodListing> createFoodListing(@RequestBody FoodListing foodListing, Principal principal) {
         FoodListing created = foodListingService.createFoodListing(foodListing, principal.getName());
         return ResponseEntity.ok(created);
@@ -39,7 +39,7 @@ public class FoodListingController {
     }
 
     @GetMapping("/provider")
-    @PreAuthorize("hasRole('PROVIDER')")
+    @PreAuthorize("hasAnyRole('PROVIDER', 'INDIVIDUAL_DONOR')")
     public ResponseEntity<List<FoodListing>> getProviderListings(Principal principal) {
         return ResponseEntity.ok(foodListingService.getListingsByProvider(principal.getName()));
     }
@@ -50,18 +50,21 @@ public class FoodListingController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('PROVIDER')")
+    @PreAuthorize("hasAnyRole('PROVIDER', 'INDIVIDUAL_DONOR')")
     public ResponseEntity<FoodListing> cancelListing(@PathVariable UUID id, Principal principal) {
         FoodListing cancelled = foodListingService.cancelListing(id, principal.getName());
         return ResponseEntity.ok(cancelled);
     }
 
     @PostMapping("/analyze-image")
-    @PreAuthorize("hasRole('PROVIDER')")
+    @PreAuthorize("hasAnyRole('PROVIDER', 'INDIVIDUAL_DONOR')")
     public ResponseEntity<java.util.Map<String, Object>> analyzeFoodImage(
-            @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+            @RequestParam(value = "file", required = false) org.springframework.web.multipart.MultipartFile fileParam,
+            @RequestParam(value = "image", required = false) org.springframework.web.multipart.MultipartFile imageParam,
+            @RequestParam(value = "providerFoodDetails", required = false) String providerFoodDetailsJson) {
         
-        if (file.isEmpty()) {
+        org.springframework.web.multipart.MultipartFile file = fileParam != null ? fileParam : imageParam;
+        if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Uploaded file cannot be empty");
         }
         
@@ -72,8 +75,9 @@ public class FoodListingController {
                 filename = "food_image.png";
             }
             
-            java.util.Map<String, Object> analysisResult = foodListingService.analyzeFoodImage(bytes, filename);
-            return ResponseEntity.ok(analysisResult);
+            java.util.Map<String, Object> rawAnalysis = foodListingService.analyzeFoodImage(bytes, filename);
+            java.util.Map<String, Object> mergedResult = foodListingService.mergeAiAndProviderData(rawAnalysis, providerFoodDetailsJson);
+            return ResponseEntity.ok(mergedResult);
         } catch (java.io.IOException e) {
             throw new RuntimeException("Failed to read food photo bytes", e);
         }

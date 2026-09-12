@@ -19,7 +19,7 @@ public class ProviderFoodController {
     }
 
     @PostMapping("/analyze-image")
-    @PreAuthorize("hasRole('PROVIDER')")
+    @PreAuthorize("hasAnyRole('PROVIDER', 'INDIVIDUAL_DONOR')")
     public ResponseEntity<Map<String, Object>> analyzeFoodImage(
             @RequestParam("image") MultipartFile file,
             @RequestParam(value = "providerFoodDetails", required = false) String providerFoodDetailsJson) {

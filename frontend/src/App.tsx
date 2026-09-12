@@ -13,6 +13,8 @@ import { VolunteerRewards } from './pages/VolunteerRewards';
 import { FindMatchingFood } from './pages/FindMatchingFood';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { CoordinatorDashboard } from './pages/CoordinatorDashboard';
+import { DonorDashboard } from './pages/DonorDashboard';
+import { CreatePersonalDonation } from './pages/CreatePersonalDonation';
 
 // Protected Route Wrapper to enforce JWT and Role based permissions
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ 
@@ -88,6 +90,38 @@ export const App: React.FC = () => {
               <ProtectedRoute allowedRoles={['PROVIDER']}>
                 <DashboardLayout>
                   <FoodDetailPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Individual Donor Routes */}
+          <Route 
+            path="/donor/dashboard" 
+            element={
+              <ProtectedRoute allowedRoles={['INDIVIDUAL_DONOR']}>
+                <DashboardLayout>
+                  <DonorDashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/donor/donate" 
+            element={
+              <ProtectedRoute allowedRoles={['INDIVIDUAL_DONOR']}>
+                <DashboardLayout>
+                  <CreatePersonalDonation />
+                </DashboardLayout>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/donor/food/new" 
+            element={
+              <ProtectedRoute allowedRoles={['INDIVIDUAL_DONOR']}>
+                <DashboardLayout>
+                  <CreatePersonalDonation />
                 </DashboardLayout>
               </ProtectedRoute>
             } 

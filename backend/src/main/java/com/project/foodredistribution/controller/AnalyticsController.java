@@ -24,7 +24,7 @@ public class AnalyticsController {
     }
 
     @GetMapping("/provider")
-    @PreAuthorize("hasRole('PROVIDER')")
+    @PreAuthorize("hasAnyRole('PROVIDER', 'INDIVIDUAL_DONOR')")
     public ResponseEntity<ProviderAnalyticsDto> getProviderAnalytics(Principal principal) {
         return ResponseEntity.ok(analyticsService.getProviderAnalytics(principal.getName()));
     }

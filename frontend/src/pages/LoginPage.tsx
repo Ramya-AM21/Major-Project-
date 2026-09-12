@@ -11,7 +11,7 @@ export const LoginPage: React.FC = () => {
 
   // Mode state: 'login' or 'register'
   const [isRegister, setIsRegister] = useState(false);
-  const [role, setRole] = useState<'PROVIDER' | 'VOLUNTEER' | 'COORDINATOR' | 'ADMIN'>('PROVIDER');
+  const [role, setRole] = useState<'PROVIDER' | 'INDIVIDUAL_DONOR' | 'VOLUNTEER' | 'COORDINATOR' | 'ADMIN'>('PROVIDER');
 
   // Login Form Values
   const [loginEmail, setLoginEmail] = useState('');
@@ -23,7 +23,7 @@ export const LoginPage: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
 
-  // Provider Specific Registration Form Values
+  // Provider / Donor Specific Registration Form Values
   const [businessName, setBusinessName] = useState('');
   const [address, setAddress] = useState('');
   const [licenseNumber, setLicenseNumber] = useState('');
@@ -49,6 +49,7 @@ export const LoginPage: React.FC = () => {
   const redirectUser = (userRole: string) => {
     switch (userRole) {
       case 'PROVIDER': navigate('/provider/dashboard'); break;
+      case 'INDIVIDUAL_DONOR': navigate('/donor/dashboard'); break;
       case 'VOLUNTEER': navigate('/volunteer/dashboard'); break;
       case 'COORDINATOR': navigate('/coordinator/dashboard'); break;
       case 'ADMIN': navigate('/admin/dashboard'); break;
@@ -73,9 +74,13 @@ export const LoginPage: React.FC = () => {
     e.preventDefault();
     setStatusError(null);
     
-    if (role === 'PROVIDER') {
-      if (!businessName || !address || !licenseNumber) {
+    if (role === 'PROVIDER' || role === 'INDIVIDUAL_DONOR') {
+      if (role === 'PROVIDER' && (!businessName || !licenseNumber)) {
         setStatusError('Please complete all supplier business details.');
+        return;
+      }
+      if (!address) {
+        setStatusError('Please provide your pickup location address.');
         return;
       }
       if (latitude === null || longitude === null) {
@@ -98,10 +103,10 @@ export const LoginPage: React.FC = () => {
         role
       };
 
-      if (role === 'PROVIDER') {
-        payload.businessName = businessName;
+      if (role === 'PROVIDER' || role === 'INDIVIDUAL_DONOR') {
+        payload.businessName = role === 'INDIVIDUAL_DONOR' ? (businessName || name) : businessName;
         payload.address = address;
-        payload.licenseNumber = licenseNumber;
+        payload.licenseNumber = licenseNumber || 'INDIVIDUAL';
         payload.latitude = latitude;
         payload.longitude = longitude;
       }
@@ -245,54 +250,64 @@ export const LoginPage: React.FC = () => {
 
               <div>
                 <label className="block text-[9px] font-bold uppercase tracking-wider text-natural-muted mb-2">Platform Role</label>
-                <div className="flex bg-[#FAF9F5] p-1.5 rounded-xl border border-natural-border">
-                  {(['PROVIDER', 'VOLUNTEER', 'COORDINATOR', 'ADMIN'] as const).map((r) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 bg-[#FAF9F5] p-1.5 rounded-xl border border-natural-border">
+                  {[
+                    { id: 'PROVIDER', label: 'Restaurant' },
+                    { id: 'INDIVIDUAL_DONOR', label: 'Individual Donor' },
+                    { id: 'VOLUNTEER', label: 'Volunteer' },
+                    { id: 'COORDINATOR', label: 'Coordinator' },
+                    { id: 'ADMIN', label: 'Admin' }
+                  ].map((item) => (
                     <button
-                      key={r}
+                      key={item.id}
                       type="button"
-                      onClick={() => setRole(r)}
-                      className={`flex-1 text-center py-2 rounded-lg text-[8px] font-black transition-all uppercase tracking-wider ${
-                        role === r
+                      onClick={() => setRole(item.id as any)}
+                      className={`text-center py-2 rounded-lg text-[8px] font-black transition-all uppercase tracking-wider ${
+                        role === item.id
                           ? 'bg-brand-600 text-white shadow-sm font-bold'
                           : 'text-natural-muted hover:bg-brand-50 hover:text-brand-700'
                       }`}
                     >
-                      {r}
+                      {item.label}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Provider Specific Details */}
-              {role === 'PROVIDER' && (
+              {/* Provider / Donor Specific Details */}
+              {(role === 'PROVIDER' || role === 'INDIVIDUAL_DONOR') && (
                 <div className="space-y-4 pt-4 border-t border-natural-border bg-white">
-                  <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text">Food Provider Details</h4>
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-natural-text">
+                    {role === 'INDIVIDUAL_DONOR' ? 'Pickup Location Details' : 'Food Provider Details'}
+                  </h4>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[9px] font-bold uppercase tracking-wider text-natural-muted">Establishment Name</label>
-                      <input
-                        type="text"
-                        required
-                        value={businessName}
-                        onChange={(e) => setBusinessName(e.target.value)}
-                        className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
-                        placeholder="E.g. Green Bowl Kitchen"
-                      />
-                    </div>
+                  {role === 'PROVIDER' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-natural-muted">Establishment Name</label>
+                        <input
+                          type="text"
+                          required
+                          value={businessName}
+                          onChange={(e) => setBusinessName(e.target.value)}
+                          className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                          placeholder="E.g. Green Bowl Kitchen"
+                        />
+                      </div>
 
-                    <div>
-                      <label className="block text-[9px] font-bold uppercase tracking-wider text-natural-muted">Food License Code</label>
-                      <input
-                        type="text"
-                        required
-                        value={licenseNumber}
-                        onChange={(e) => setLicenseNumber(e.target.value)}
-                        className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
-                        placeholder="E.g. LC-D77E45"
-                      />
+                      <div>
+                        <label className="block text-[9px] font-bold uppercase tracking-wider text-natural-muted">Food License Code</label>
+                        <input
+                          type="text"
+                          required
+                          value={licenseNumber}
+                          onChange={(e) => setLicenseNumber(e.target.value)}
+                          className="mt-1.5 block w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-brand-650"
+                          placeholder="E.g. LC-D77E45"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div>
                     <label className="block text-[9px] font-bold uppercase tracking-wider text-natural-muted">Pickup Address Location</label>

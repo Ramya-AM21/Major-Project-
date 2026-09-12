@@ -23,7 +23,7 @@ public class ProviderController {
     }
 
     @GetMapping("/profile")
-    @PreAuthorize("hasRole('PROVIDER')")
+    @PreAuthorize("hasAnyRole('PROVIDER', 'INDIVIDUAL_DONOR')")
     public ResponseEntity<Map<String, Object>> getProviderProfile(Principal principal) {
         FoodProvider provider = foodProviderRepository.findByUserEmail(principal.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("Food Provider profile not found for user: " + principal.getName()));
@@ -33,7 +33,7 @@ public class ProviderController {
     }
 
     @PutMapping("/pickup-location")
-    @PreAuthorize("hasRole('PROVIDER')")
+    @PreAuthorize("hasAnyRole('PROVIDER', 'INDIVIDUAL_DONOR')")
     public ResponseEntity<Map<String, Object>> updatePickupLocation(
             @RequestBody Map<String, Object> locationData,
             Principal principal) {

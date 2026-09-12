@@ -357,9 +357,23 @@ public class FoodListingService {
         String manualAllergens = getAsString(manualDetails, "allergens");
         String manualSafeHours = getAsString(manualDetails, "safeConsumptionHours");
 
+        // Extract extractedDetails sub-map if present
+        java.util.Map<String, Object> extractedDetails = null;
+        if (aiSuccess && aiResult.get("extractedDetails") instanceof java.util.Map) {
+            extractedDetails = (java.util.Map<String, Object>) aiResult.get("extractedDetails");
+        }
+
         // AI field values
         String aiFoodName = aiSuccess ? getAsString(aiResult, "food_name") : null;
+        if (!isNotEmpty(aiFoodName) && extractedDetails != null) {
+            aiFoodName = getAsString(extractedDetails, "suggestedFoodName");
+        }
+
         String aiCategoryStr = aiSuccess ? getAsString(aiResult, "food_category") : null;
+        if (!isNotEmpty(aiCategoryStr) && extractedDetails != null) {
+            aiCategoryStr = getAsString(extractedDetails, "suggestedCategory");
+        }
+
         String aiFoodType = aiSuccess ? getAsString(aiResult, "food_type") : null;
         String aiDescription = aiSuccess ? getAsString(aiResult, "description") : null;
         
@@ -367,12 +381,17 @@ public class FoodListingService {
         String aiQuantity = null;
         if (aiSuccess && aiResult.get("estimated_quantity") != null) {
             aiQuantity = aiResult.get("estimated_quantity").toString();
+        } else if (extractedDetails != null && extractedDetails.get("suggestedQuantity") != null) {
+            aiQuantity = extractedDetails.get("suggestedQuantity").toString();
         }
+
         String aiUnit = null;
         if (aiSuccess && aiResult.get("unit") != null) {
             aiUnit = aiResult.get("unit").toString();
         } else if (aiSuccess && aiResult.get("estimated_unit") != null) {
             aiUnit = aiResult.get("estimated_unit").toString();
+        } else if (extractedDetails != null && extractedDetails.get("suggestedUnit") != null) {
+            aiUnit = extractedDetails.get("suggestedUnit").toString();
         }
 
         // Estimated servings
@@ -397,6 +416,10 @@ public class FoodListingService {
             String catLower = aiCategoryStr.toLowerCase();
             if (catLower.contains("non-veg") || catLower.contains("non veg") || catLower.contains("meat") || catLower.contains("chicken") || catLower.contains("fish")) {
                 mappedCategory = "NON_VEG";
+            } else if (catLower.contains("egg")) {
+                mappedCategory = "EGG";
+            } else if (catLower.contains("veg") || catLower.contains("vegetarian")) {
+                mappedCategory = "VEG";
             }
         }
         if (mappedCategory == null) {
@@ -410,6 +433,9 @@ public class FoodListingService {
             if (!list.isEmpty()) {
                 aiAllergens = String.join(", ", list);
             }
+        }
+        if (!isNotEmpty(aiAllergens) && extractedDetails != null) {
+            aiAllergens = getAsString(extractedDetails, "suggestedAllergens");
         }
 
         // ---- LOGGING ----

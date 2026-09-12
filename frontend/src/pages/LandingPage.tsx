@@ -140,22 +140,34 @@ export const LandingPage: React.FC = () => {
               Greater Impact.
             </h1>
             <p className="text-sm sm:text-base text-natural-muted font-medium leading-relaxed max-w-2xl mx-auto">
-              A route-aware logistics platform matching daily commuters with surplus food from restaurants, delivering directly to shelters with carbon-zero deviation.
+              A route-aware logistics platform matching daily commuters with surplus food from restaurants, birthdays, weddings and events, delivering directly to shelters with carbon-zero deviation.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 pt-4 justify-center w-full sm:w-auto">
               <button
-                onClick={() => navigate(isAuthenticated ? getDashboardPath() : '/login?register=true')}
+                onClick={() => navigate(isAuthenticated ? (user?.role === 'INDIVIDUAL_DONOR' ? '/donor/donate' : getDashboardPath()) : '/login?register=true')}
                 className="btn-primary flex items-center justify-center space-x-2 text-sm py-4 px-8"
               >
-                <span>Start Redistributing</span>
+                <span>Donate Surplus Food</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
-              <a
-                href="#how-it-works"
+              <button
+                onClick={() => navigate(isAuthenticated ? getDashboardPath() : '/login?register=true')}
                 className="btn-secondary flex items-center justify-center text-center text-sm py-4 px-8"
               >
-                See How It Works
-              </a>
+                Start Redistributing
+              </button>
+            </div>
+            
+            <div className="p-4 bg-white/80 backdrop-blur-xs border border-emerald-200 rounded-2xl max-w-lg mx-auto shadow-sm text-left flex items-center space-x-4">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-800 shrink-0 font-bold">
+                <Heart className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-natural-text uppercase tracking-wider">Your celebration can become someone's meal.</h4>
+                <p className="text-[11px] text-natural-muted leading-tight mt-0.5 font-medium">
+                  Donate surplus food from birthdays, functions and events and help it reach verified areas of need.
+                </p>
+              </div>
             </div>
           </div>
         </section>

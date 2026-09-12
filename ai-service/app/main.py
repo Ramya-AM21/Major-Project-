@@ -145,7 +145,8 @@ def parse_ocr_text_to_food_details(raw_text):
     # Extract suggested primary food name
     suggested_food_name = ""
     if food_items:
-        suggested_food_name = food_items[0]["name"]
+        names = [f["name"] for f in food_items if f.get("name")]
+        suggested_food_name = ", ".join(names[:4])
         
     # Extract total quantity from text
     suggested_quantity = None

@@ -62,7 +62,7 @@ public class UserService {
 
         user = userRepository.save(user);
 
-        if (request.getRole() == Role.PROVIDER) {
+        if (request.getRole() == Role.PROVIDER || request.getRole() == Role.INDIVIDUAL_DONOR) {
             String businessName = request.getBusinessName() != null && !request.getBusinessName().trim().isEmpty()
                     ? request.getBusinessName().trim()
                     : request.getName();
@@ -71,10 +71,10 @@ public class UserService {
             Double lng = request.getLongitude();
 
             if (address == null || address.trim().isEmpty()) {
-                throw new IllegalArgumentException("Provider pickup location address is required for registration");
+                throw new IllegalArgumentException("Pickup location address is required for registration");
             }
             if (lat == null || lng == null) {
-                throw new IllegalArgumentException("Provider pickup coordinates (latitude and longitude) are required for registration");
+                throw new IllegalArgumentException("Pickup coordinates (latitude and longitude) are required for registration");
             }
             if (lat < -90.0 || lat > 90.0) {
                 throw new IllegalArgumentException("Latitude must be between -90 and +90 degrees");

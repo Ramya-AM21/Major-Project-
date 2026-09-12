@@ -88,6 +88,9 @@ public class FoodListing {
 
     private String aiSource;
 
+    @Enumerated(EnumType.STRING)
+    private DonationOccasion donationOccasion;
+
     public FoodListing() {
         // ...
     }
@@ -191,4 +194,7 @@ public class FoodListing {
 
     public String getAiSource() { return aiSource; }
     public void setAiSource(String aiSource) { this.aiSource = aiSource; }
+
+    public DonationOccasion getDonationOccasion() { return donationOccasion; }
+    public void setDonationOccasion(DonationOccasion donationOccasion) { this.donationOccasion = donationOccasion; }
 }

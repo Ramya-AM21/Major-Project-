@@ -937,6 +937,13 @@ export const FindMatchingFood: React.FC = () => {
                         <div className="flex gap-3">
                           <div className="flex-1 space-y-2 text-left">
                             <div className="flex flex-wrap items-center gap-1">
+                              <span className={`text-[8px] px-1.5 py-0.5 rounded font-black uppercase font-mono border ${
+                                (rec.foodListing as any).donationOccasion || (rec.foodListing.provider as any)?.user?.role === 'INDIVIDUAL_DONOR'
+                                  ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                  : 'bg-blue-50 text-blue-800 border-blue-200'
+                              }`}>
+                                {(rec.foodListing as any).donationOccasion || (rec.foodListing.provider as any)?.user?.role === 'INDIVIDUAL_DONOR' ? 'Personal Donation' : 'Restaurant Donation'}
+                              </span>
                               <span className="text-[8px] bg-brand-50 border border-brand-100 text-brand-700 px-1.5 py-0.5 rounded font-black uppercase font-mono flex items-center gap-0.5">
                                 <Star className="w-2.5 h-2.5 fill-brand-650 text-brand-650" /> {rec.matchingScore}% {matchQuality}
                               </span>

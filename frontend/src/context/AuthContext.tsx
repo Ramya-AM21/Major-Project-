@@ -19,7 +19,7 @@ interface User {
   name: string;
   email: string;
   phoneNumber: string;
-  role: 'ADMIN' | 'PROVIDER' | 'VOLUNTEER' | 'COORDINATOR';
+  role: 'ADMIN' | 'PROVIDER' | 'INDIVIDUAL_DONOR' | 'VOLUNTEER' | 'COORDINATOR';
 }
 
 interface AuthContextType {
@@ -65,7 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(parsedUser);
         setIsAuthenticated(true);
         axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-        if (parsedUser.role === 'PROVIDER') {
+        if (parsedUser.role === 'PROVIDER' || parsedUser.role === 'INDIVIDUAL_DONOR') {
           fetchProviderProfile();
         }
       } catch (e) {
@@ -98,7 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-      if (role === 'PROVIDER') {
+      if (role === 'PROVIDER' || role === 'INDIVIDUAL_DONOR') {
         await fetchProviderProfile();
       }
     } catch (error: any) {
@@ -127,7 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-      if (role === 'PROVIDER') {
+      if (role === 'PROVIDER' || role === 'INDIVIDUAL_DONOR') {
         await fetchProviderProfile();
       }
     } catch (error: any) {
