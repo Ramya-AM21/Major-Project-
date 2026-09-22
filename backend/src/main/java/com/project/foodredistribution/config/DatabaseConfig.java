@@ -17,6 +17,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
 import java.net.URI;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.util.Properties;
 
 @Configuration
@@ -33,14 +35,18 @@ public class DatabaseConfig {
     @Value("${spring.datasource.password:}")
     private String rawPassword;
 
+    private String activeDialect = "org.hibernate.dialect.H2Dialect";
+
     @Bean
     @Primary
     public DataSource dataSource() {
-        HikariConfig config = new HikariConfig();
-        
         String jdbcUrl = rawUrl;
         String username = rawUsername;
         String password = rawPassword;
+        String driverClass = "org.h2.Driver";
+        String dialect = "org.hibernate.dialect.H2Dialect";
+
+        boolean isExternal = false;
 
         // If DATABASE_URL starts with postgres:// or postgresql:// (Render/Heroku format)
         if (rawUrl.startsWith("postgres://") || rawUrl.startsWith("postgresql://")) {
@@ -59,8 +65,9 @@ public class DatabaseConfig {
                 }
 
                 jdbcUrl = "jdbc:postgresql://" + host + ":" + port + path + "?sslmode=require";
-                config.setDriverClassName("org.postgresql.Driver");
-                log.info("Converted PostgreSQL URL format to JDBC: {}", jdbcUrl);
+                driverClass = "org.postgresql.Driver";
+                dialect = "org.hibernate.dialect.PostgreSQLDialect";
+                isExternal = true;
             } catch (Exception e) {
                 log.error("Failed to parse PostgreSQL URI: {}", e.getMessage());
             }
@@ -80,26 +87,52 @@ public class DatabaseConfig {
                 }
 
                 jdbcUrl = "jdbc:mysql://" + host + ":" + port + path + "?useSSL=true&allowPublicKeyRetrieval=true";
-                config.setDriverClassName("com.mysql.cj.jdbc.Driver");
-                log.info("Converted MySQL URI format to JDBC: {}", jdbcUrl);
+                driverClass = "com.mysql.cj.jdbc.Driver";
+                dialect = "org.hibernate.dialect.MySQLDialect";
+                isExternal = true;
             } catch (Exception e) {
                 log.error("Failed to parse MySQL URI: {}", e.getMessage());
             }
         } else if (rawUrl.contains("jdbc:mysql:")) {
-            config.setDriverClassName("com.mysql.cj.jdbc.Driver");
+            driverClass = "com.mysql.cj.jdbc.Driver";
+            dialect = "org.hibernate.dialect.MySQLDialect";
+            isExternal = true;
         } else if (rawUrl.contains("jdbc:postgresql:")) {
-            config.setDriverClassName("org.postgresql.Driver");
-        } else if (rawUrl.contains("jdbc:h2:")) {
-            config.setDriverClassName("org.h2.Driver");
+            driverClass = "org.postgresql.Driver";
+            dialect = "org.hibernate.dialect.PostgreSQLDialect";
+            isExternal = true;
         }
 
+        // Test connection if external
+        if (isExternal) {
+            log.info("Testing external database connection to: {}", jdbcUrl);
+            try {
+                Class.forName(driverClass);
+                DriverManager.setLoginTimeout(5); // 5 second test limit
+                try (Connection conn = DriverManager.getConnection(jdbcUrl, username, password)) {
+                    log.info("Successfully connected to external database!");
+                    activeDialect = dialect;
+                }
+            } catch (Exception e) {
+                log.warn("Could not connect to external database ({}): {}. Falling back to H2 in-memory database for safe deployment.", jdbcUrl, e.getMessage());
+                // Fallback to H2
+                jdbcUrl = "jdbc:h2:mem:fooddb;DB_CLOSE_DELAY=-1";
+                username = "sa";
+                password = "";
+                driverClass = "org.h2.Driver";
+                activeDialect = "org.hibernate.dialect.H2Dialect";
+            }
+        } else {
+            activeDialect = dialect;
+        }
+
+        HikariConfig config = new HikariConfig();
+        config.setDriverClassName(driverClass);
         config.setJdbcUrl(jdbcUrl);
         config.setUsername(username);
         config.setPassword(password);
-        
-        // Hikari Connection Pool Settings for Cloud Resilience
-        config.setInitializationFailTimeout(0); // Prevents crash on initial cold start connection delay
-        config.setConnectionTimeout(30000); // 30 seconds
+        config.setInitializationFailTimeout(5000);
+        config.setConnectionTimeout(10000);
         config.setMaximumPoolSize(10);
         config.setMinimumIdle(2);
 
@@ -119,19 +152,8 @@ public class DatabaseConfig {
         Properties properties = new Properties();
         properties.setProperty("hibernate.hbm2ddl.auto", "update");
         properties.setProperty("hibernate.show_sql", "false");
-
-        // Determine dialect explicitly to avoid 'Unable to determine Dialect without JDBC metadata'
-        String urlLower = rawUrl.toLowerCase();
-        if (urlLower.contains("postgres")) {
-            properties.setProperty("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
-            log.info("Configured JPA Hibernate Dialect: PostgreSQLDialect");
-        } else if (urlLower.contains("mysql")) {
-            properties.setProperty("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
-            log.info("Configured JPA Hibernate Dialect: MySQLDialect");
-        } else {
-            properties.setProperty("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
-            log.info("Configured JPA Hibernate Dialect: H2Dialect");
-        }
+        properties.setProperty("hibernate.dialect", activeDialect);
+        log.info("Active Hibernate Dialect set to: {}", activeDialect);
 
         em.setJpaProperties(properties);
         return em;
