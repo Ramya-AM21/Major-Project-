@@ -2,14 +2,22 @@ package com.project.foodredistribution.config;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import jakarta.persistence.EntityManagerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.orm.jpa.JpaTransactionManager;
+import org.springframework.orm.jpa.JpaVendorAdapter;
+import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
+import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
 import java.net.URI;
+import java.util.Properties;
 
 @Configuration
 public class DatabaseConfig {
@@ -26,6 +34,7 @@ public class DatabaseConfig {
     private String rawPassword;
 
     @Bean
+    @Primary
     public DataSource dataSource() {
         HikariConfig config = new HikariConfig();
         
@@ -95,5 +104,42 @@ public class DatabaseConfig {
         config.setMinimumIdle(2);
 
         return new HikariDataSource(config);
+    }
+
+    @Bean
+    @Primary
+    public LocalContainerEntityManagerFactoryBean entityManagerFactory(DataSource dataSource) {
+        LocalContainerEntityManagerFactoryBean em = new LocalContainerEntityManagerFactoryBean();
+        em.setDataSource(dataSource);
+        em.setPackagesToScan("com.project.foodredistribution.entity");
+
+        JpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
+        em.setJpaVendorAdapter(vendorAdapter);
+
+        Properties properties = new Properties();
+        properties.setProperty("hibernate.hbm2ddl.auto", "update");
+        properties.setProperty("hibernate.show_sql", "false");
+
+        // Determine dialect explicitly to avoid 'Unable to determine Dialect without JDBC metadata'
+        String urlLower = rawUrl.toLowerCase();
+        if (urlLower.contains("postgres")) {
+            properties.setProperty("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
+            log.info("Configured JPA Hibernate Dialect: PostgreSQLDialect");
+        } else if (urlLower.contains("mysql")) {
+            properties.setProperty("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
+            log.info("Configured JPA Hibernate Dialect: MySQLDialect");
+        } else {
+            properties.setProperty("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
+            log.info("Configured JPA Hibernate Dialect: H2Dialect");
+        }
+
+        em.setJpaProperties(properties);
+        return em;
+    }
+
+    @Bean
+    @Primary
+    public PlatformTransactionManager transactionManager(EntityManagerFactory entityManagerFactory) {
+        return new JpaTransactionManager(entityManagerFactory);
     }
 }
