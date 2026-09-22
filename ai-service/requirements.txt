@@ -10,3 +10,6 @@ torchvision
 ImageHash
 joblib
 python-multipart
+requests
+python-dotenv
+Pillow
