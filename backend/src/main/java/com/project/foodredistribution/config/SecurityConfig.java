@@ -20,9 +20,9 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
@@ -71,18 +71,24 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
+        
+        List<String> patterns = new ArrayList<>();
         String allowedOriginsEnv = System.getenv("ALLOWED_ORIGINS");
         
         if (allowedOriginsEnv != null && !allowedOriginsEnv.trim().isEmpty()) {
-            List<String> origins = Arrays.stream(allowedOriginsEnv.split(","))
-                    .map(String::trim)
-                    .filter(s -> !s.isEmpty())
-                    .collect(Collectors.toList());
-            configuration.setAllowedOrigins(origins);
-        } else {
-            configuration.addAllowedOriginPattern("*");
+            for (String s : allowedOriginsEnv.split(",")) {
+                if (!s.trim().isEmpty()) {
+                    patterns.add(s.trim());
+                }
+            }
         }
         
+        // Auto-allow all Vercel domains and local dev instances
+        patterns.add("https://*.vercel.app");
+        patterns.add("http://localhost:*");
+        patterns.add("http://127.0.0.1:*");
+        
+        configuration.setAllowedOriginPatterns(patterns);
         configuration.setAllowCredentials(true);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "x-auth-token", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"));
