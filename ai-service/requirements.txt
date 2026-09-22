@@ -7,3 +7,5 @@ easyocr
 opencv-python-headless
 torch
 torchvision
+ImageHash
+joblib

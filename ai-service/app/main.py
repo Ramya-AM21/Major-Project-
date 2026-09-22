@@ -32,6 +32,8 @@ from dotenv import load_dotenv
 
 # Load .env from the ai-service directory
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 ENV_FILE = os.path.join(BASE_DIR, ".env")
 
 load_dotenv(ENV_FILE)
