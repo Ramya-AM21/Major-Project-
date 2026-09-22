@@ -6,9 +6,7 @@ spring:
     url: ${DATABASE_URL:jdbc:h2:mem:fooddb;DB_CLOSE_DELAY=-1}
     username: ${DATABASE_USERNAME:sa}
     password: ${DATABASE_PASSWORD:}
-    driver-class-name: ${DATABASE_DRIVER:org.h2.Driver}
   jpa:
-    database-platform: ${JPA_DIALECT:org.hibernate.dialect.H2Dialect}
     hibernate:
       ddl-auto: update
     show-sql: false
