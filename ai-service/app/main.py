@@ -198,6 +198,11 @@ def parse_ocr_text_to_food_details(raw_text):
 
 app = FastAPI(title="Route-Based Food Waste Management AI Service", version="1.0.0")
 
+@app.get("/health")
+@app.get("/")
+def health_check():
+    return {"status": "UP", "service": "AnnaSetu AI Service"}
+
 # --- INITIALIZE DEMAND PREDICTION MODEL (RANDOM FOREST) ---
 # Generate mock historical training data
 np.random.seed(42)
@@ -1021,4 +1026,5 @@ async def detect_fraud_endpoint(
     return res
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8002)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

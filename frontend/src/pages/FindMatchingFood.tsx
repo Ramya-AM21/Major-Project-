@@ -400,8 +400,11 @@ export const FindMatchingFood: React.FC = () => {
   useEffect(() => {
     if (!activeRoute) return;
 
+    const wsBaseUrl = import.meta.env.VITE_WS_URL;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//localhost:8081/ws/tracking`;
+    const wsUrl = wsBaseUrl 
+      ? `${wsBaseUrl}/ws/tracking` 
+      : `${protocol}//${window.location.hostname}:8081/ws/tracking`;
 
     let ws: WebSocket | null = null;
     try {
