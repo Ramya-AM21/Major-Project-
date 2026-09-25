@@ -49,6 +49,7 @@ public class SecurityConfig {
                 .requestMatchers("/h2-console/**").permitAll()
                 .requestMatchers("/api/v1/zones/**").permitAll() // Simple lookup can be public for maps
                 .requestMatchers("/api/v1/analytics/admin/summary").permitAll() // public stats for landing page if needed
+                .requestMatchers("/api/v1/food/analyze-image", "/api/provider/food/analyze-image").permitAll()
                 .requestMatchers("/ws/tracking/**").permitAll()
                 .requestMatchers("/uploads/**").permitAll()
                 .anyRequest().authenticated()

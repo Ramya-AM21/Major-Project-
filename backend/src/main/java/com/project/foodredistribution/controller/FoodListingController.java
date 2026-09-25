@@ -57,7 +57,6 @@ public class FoodListingController {
     }
 
     @PostMapping("/analyze-image")
-    @PreAuthorize("hasAnyRole('PROVIDER', 'INDIVIDUAL_DONOR', 'VOLUNTEER', 'COORDINATOR', 'ADMIN')")
     public ResponseEntity<java.util.Map<String, Object>> analyzeFoodImage(
             @RequestParam(value = "file", required = false) org.springframework.web.multipart.MultipartFile fileParam,
             @RequestParam(value = "image", required = false) org.springframework.web.multipart.MultipartFile imageParam,
