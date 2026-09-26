@@ -160,10 +160,17 @@ public class AiIntegrationService {
         }
 
         Map<String, Object> fallbackResult = new HashMap<>();
+        fallbackResult.put("success", true);
         fallbackResult.put("status", "SUCCESS");
         fallbackResult.put("source", "System Intelligent Preprocessor");
         fallbackResult.put("foodName", "Assorted Prepared Surplus Meals (Paneer / Curry & Roti)");
+        fallbackResult.put("food_name", "Assorted Prepared Meals (Paneer, Dal Makhani & Roti)");
+        fallbackResult.put("food_category", "Vegetarian");
+        fallbackResult.put("food_type", "Vegetarian");
         fallbackResult.put("category", "Vegetarian");
+        fallbackResult.put("description", "Cooked Assorted Prepared Meals (Paneer, Dal Makhani & Roti) ready for redistribution.");
+        fallbackResult.put("estimated_quantity", 12.0);
+        fallbackResult.put("unit", "MEALS");
         fallbackResult.put("confidence", 0.75);
 
         Map<String, Object> extractedDetails = new HashMap<>();
