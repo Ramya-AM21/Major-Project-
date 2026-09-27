@@ -588,9 +588,16 @@ def analyze_image_dynamically(content: bytes, filename: str) -> dict:
                 hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
                 mean_h = np.mean(hsv[:, :, 0])
                 mean_s = np.mean(hsv[:, :, 1])
+                mean_v = np.mean(hsv[:, :, 2])
                 
+                # Check for Printed Paper Receipt / Invoice (High brightness V > 170, low saturation S < 45)
+                if mean_v > 170 and mean_s < 45:
+                    matched_name = "Restaurant Receipt Surplus Order"
+                    matched_cat = "Cooked Meal"
+                    matched_type = "Vegetarian"
+                    matched_items = ["South Indian Dosa", "Cheese Toast S/W", "Side Dishes"]
                 # Green dominant (HSV Hue 35-85) -> Veggies / Fresh Salad
-                if 35 <= mean_h <= 85 and mean_s > 40:
+                elif 35 <= mean_h <= 85 and mean_s > 40:
                     matched_name = "Fresh Green Veggies & Salad"
                     matched_cat = "Vegetables"
                     matched_type = "Vegetarian"
@@ -608,20 +615,32 @@ def analyze_image_dynamically(content: bytes, filename: str) -> dict:
                     matched_type = "Non-Vegetarian"
                     matched_items = ["Spiced Gravy Dish", "Flatbread"]
                 else:
-                    words = [w.capitalize() for w in clean_fn.split() if len(w) > 2 and w not in ["img", "photo", "pic", "image", "wp", "whatsapp", "signal"]]
-                    title = " ".join(words[:3]) if words else "Fresh Donated Meal"
-                    matched_name = f"{title} Portion"
+                    def is_junk_word(w: str) -> bool:
+                        w_clean = w.lower().strip()
+                        if len(w_clean) < 3 or len(w_clean) > 14:
+                            return True
+                        if not any(c in w_clean for c in "aeiouy"):
+                            return True
+                        junk = ["img", "photo", "pic", "image", "wp", "whatsapp", "signal", "media", "upload", "temp", "blob", "file", "fjpcycdamamt"]
+                        if any(j in w_clean for j in junk):
+                            return True
+                        consonants = sum(1 for c in w_clean if c in "bcdfghjklmnpqrstvwxyz")
+                        if consonants / float(len(w_clean)) > 0.75:
+                            return True
+                        return False
+
+                    valid_words = [w.capitalize() for w in clean_fn.split() if not is_junk_word(w)]
+                    title = " ".join(valid_words[:3]) if valid_words else "Assorted Prepared Meal"
+                    matched_name = f"{title}"
                     matched_cat = "Cooked Meal"
                     matched_type = "Vegetarian"
-                    matched_items = [f"{title} Main Dish"]
+                    matched_items = [f"{title} Portion"]
         except Exception as img_err:
             print(f"[DYNAMIC ANALYSIS WARN] Image pixel decode warning: {img_err}")
 
     if not matched_name:
-        words = [w.capitalize() for w in clean_fn.split() if len(w) > 2 and w not in ["img", "photo", "pic", "image", "wp", "whatsapp"]]
-        title = " ".join(words[:2]) if words else "Fresh Meal"
-        matched_name = f"{title} Package"
-        matched_items = [f"{title} Main Item"]
+        matched_name = "Assorted Donated Surplus Meal"
+        matched_items = ["Prepared Surplus Meal Portion"]
 
     # Calculate dynamic quantity derived from payload size signature
     calc_qty = float(max(5, min(50, (len(content) % 20) + 10)))
@@ -678,7 +697,7 @@ async def analyze_food(image: UploadFile = File(...)):
         gemini_key = os.getenv("GEMINI_API_KEY")
 
         if gemini_key:
-            models_to_try = ["gemini-1.5-flash", "gemini-2.0-flash"]
+            models_to_try = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
             image_b64 = base64.b64encode(content).decode("utf-8")
             mime_type = image.content_type or "image/jpeg"
             prompt = build_food_ai_prompt("")

@@ -15,8 +15,14 @@ import java.util.UUID;
 @Service
 public class AiIntegrationService {
 
-    private static final Logger log = LoggerFactory.getLogger(AiIntegrationService.class);
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
+
+    public AiIntegrationService() {
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(45000);
+        factory.setReadTimeout(60000);
+        this.restTemplate = new RestTemplate(factory);
+    }
 
     @Value("${app.ai.url}")
     private String aiServiceUrl;
