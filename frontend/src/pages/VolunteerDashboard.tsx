@@ -1313,13 +1313,8 @@ export const VolunteerDashboard: React.FC = () => {
                 <div className="space-y-3 bg-[#FAF9F5] p-4 rounded-xl border border-natural-border">
                   <span className="text-xs font-bold text-natural-text uppercase tracking-wider block">Confirm Dispatch Handover</span>
                   <p className="text-xs text-natural-muted leading-relaxed font-medium">
-                    Please collect the package from the kitchen staff and enter the 6-digit handover OTP.
+                    Please collect the package from the food provider staff and enter the 6-digit pickup OTP code provided by them.
                   </p>
-                  {verificationData && (
-                    <div className="text-[9px] text-accent-700 bg-accent-50 border border-accent-100 p-2.5 rounded-lg flex items-center space-x-1.5 font-mono font-bold">
-                      <span><Lightbulb className="w-3.5 h-3.5 inline mr-1 text-accent-700 align-text-bottom" /> <strong>Simulation OTP:</strong> <code>{verificationData.pickupOtp}</code></span>
-                    </div>
-                  )}
                   <div className="flex space-x-2">
                     <input
                       type="text"
@@ -1382,12 +1377,6 @@ export const VolunteerDashboard: React.FC = () => {
                       Enter the destination handover OTP code obtained from the shelter coordinator.
                     </p>
                   </div>
-
-                  {verificationData && (
-                    <div className="text-[9px] text-accent-700 bg-accent-50 border border-accent-100 p-2.5 rounded-lg flex items-center space-x-1.5 font-mono font-bold">
-                      <span><Lightbulb className="w-3.5 h-3.5 inline mr-1 text-accent-700 align-text-bottom" /> <strong>Simulation OTP:</strong> <code>{verificationData.deliveryOtp}</code></span>
-                    </div>
-                  )}
                   <div className="flex space-x-2">
                     <input
                       type="text"

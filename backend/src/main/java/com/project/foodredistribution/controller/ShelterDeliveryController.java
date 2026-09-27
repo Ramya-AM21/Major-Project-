@@ -247,6 +247,9 @@ public class ShelterDeliveryController {
     @PreAuthorize("hasRole('VOLUNTEER')")
     public ResponseEntity<List<DeliveryAssignment>> getVolunteerDeliveries(Principal principal) {
         List<DeliveryAssignment> list = shelterDeliveryService.getVolunteerDeliveries(principal.getName());
+        for (DeliveryAssignment assignment : list) {
+            assignment.setOtp(null); // Mask OTP code for volunteer
+        }
         return ResponseEntity.ok(list);
     }
 }

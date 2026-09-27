@@ -7,17 +7,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Random;
 import java.util.UUID;
 
 @Service
 public class DeliveryTaskService {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DeliveryTaskService.class);
+    private static final SecureRandom secureRandom = new SecureRandom();
 
     private final DeliveryTaskRepository deliveryTaskRepository;
     private final FoodListingRepository foodListingRepository;
@@ -229,6 +230,21 @@ public class DeliveryTaskService {
         // Update food status to ACCEPTED (lifecycle update!)
         food.setStatus("ACCEPTED");
         foodListingRepository.save(food);
+
+        // Regenerate fresh SecureRandom OTPs and set 2-hour expiry for the accepted transaction
+        Optional<Verification> oVer = verificationRepository.findByTaskId(taskId);
+        if (oVer.isPresent()) {
+            Verification verification = oVer.get();
+            verification.setPickupOtp(generateOtp());
+            verification.setDeliveryOtp(generateOtp());
+            verification.setPickupOtpExpiry(LocalDateTime.now().plusHours(2));
+            verification.setDeliveryOtpExpiry(LocalDateTime.now().plusHours(2));
+            verification.setPickupOtpAttempts(0);
+            verification.setDeliveryOtpAttempts(0);
+            verification.setPickupTimestamp(null);
+            verification.setDeliveryTimestamp(null);
+            verificationRepository.save(verification);
+        }
 
         // Audit log
         auditLogService.log(volunteer.getUser().getEmail(), "VOLUNTEER", "TASK_ACCEPTED", "DeliveryTask", taskId.toString(), "Task accepted successfully with OSRM validation");
@@ -807,8 +823,7 @@ public class DeliveryTaskService {
     }
 
     private String generateOtp() {
-        Random random = new Random();
-        int otp = 100000 + random.nextInt(900000);
+        int otp = 100000 + secureRandom.nextInt(900000);
         return String.valueOf(otp);
     }
 

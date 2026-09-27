@@ -12,11 +12,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
 
 @Service
 public class ShelterDeliveryService {
+
+    private static final SecureRandom secureRandom = new SecureRandom();
 
     private final ShelterRepository shelterRepository;
     private final FoodRequirementRepository foodRequirementRepository;
@@ -367,11 +370,10 @@ public class ShelterDeliveryService {
         assignment.setVolunteer(volunteer);
         assignment.setStatus("ASSIGNED");
         
-        // Generate secure 6-digit OTP
-        Random random = new Random();
-        int otpCode = 100000 + random.nextInt(900000);
+        // Generate secure 6-digit OTP using SecureRandom
+        int otpCode = 100000 + secureRandom.nextInt(900000);
         assignment.setOtp(String.valueOf(otpCode));
-        assignment.setOtpExpiry(LocalDateTime.now().plusHours(3)); // 3 hours expiration window
+        assignment.setOtpExpiry(LocalDateTime.now().plusHours(2)); // 2 hours expiration window
         assignment.setOtpAttempts(0);
 
         DeliveryAssignment saved = deliveryAssignmentRepository.save(assignment);

@@ -332,7 +332,7 @@ export const FoodDetailPage: React.FC = () => {
               </div>
 
               {/* OTP presentation for Provider screen */}
-              {verification?.pickupOtp && (listing.status === 'AVAILABLE' || listing.status === 'MATCHED') && (
+              {verification?.pickupOtp && (listing.status === 'AVAILABLE' || listing.status === 'MATCHED' || listing.status === 'ACCEPTED' || listing.status === 'NAVIGATING_TO_PICKUP' || listing.status === 'ARRIVED_AT_PICKUP') && (
                 <div className="p-4 bg-brand-50 border border-brand-100 rounded-xl text-center">
                   <span className="text-[9px] uppercase font-bold tracking-wider text-brand-700 block">Pickup Security OTP</span>
                   <span className="text-xl font-mono font-black text-brand-650 tracking-widest mt-1 block">

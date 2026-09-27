@@ -86,9 +86,36 @@ public class VerificationController {
     }
 
     @GetMapping("/task/{taskId}")
-    public ResponseEntity<Verification> getVerificationByTaskId(@PathVariable UUID taskId) {
+    public ResponseEntity<Verification> getVerificationByTaskId(@PathVariable UUID taskId, java.security.Principal principal) {
         Verification verification = verificationRepository.findByTaskId(taskId)
                 .orElseThrow(() -> new com.project.foodredistribution.exception.ResourceNotFoundException("Verification record not found for taskId: " + taskId));
+        
+        // If caller is the assigned VOLUNTEER, mask pickupOtp and deliveryOtp to prevent leakage
+        if (principal != null) {
+            String userEmail = principal.getName();
+            if (verification.getTask() != null && verification.getTask().getVolunteer() != null &&
+                userEmail.equalsIgnoreCase(verification.getTask().getVolunteer().getUser().getEmail())) {
+                Verification copy = new Verification();
+                copy.setId(verification.getId());
+                copy.setTask(verification.getTask());
+                copy.setPickupOtp(null); // Masked for volunteer
+                copy.setDeliveryOtp(null); // Masked for volunteer
+                copy.setPickupTimestamp(verification.getPickupTimestamp());
+                copy.setDeliveryTimestamp(verification.getDeliveryTimestamp());
+                copy.setPickupLatitude(verification.getPickupLatitude());
+                copy.setPickupLongitude(verification.getPickupLongitude());
+                copy.setDeliveryLatitude(verification.getDeliveryLatitude());
+                copy.setDeliveryLongitude(verification.getDeliveryLongitude());
+                copy.setProofImageUrl(verification.getProofImageUrl());
+                copy.setDeliveryRadiusVerified(verification.getDeliveryRadiusVerified());
+                copy.setVerificationConfidence(verification.getVerificationConfidence());
+                copy.setPickupOtpExpiry(verification.getPickupOtpExpiry());
+                copy.setDeliveryOtpExpiry(verification.getDeliveryOtpExpiry());
+                copy.setPickupOtpAttempts(verification.getPickupOtpAttempts());
+                copy.setDeliveryOtpAttempts(verification.getDeliveryOtpAttempts());
+                return ResponseEntity.ok(copy);
+            }
+        }
         return ResponseEntity.ok(verification);
     }
 }
