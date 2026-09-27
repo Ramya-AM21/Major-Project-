@@ -15,6 +15,7 @@ import java.util.UUID;
 @Service
 public class AiIntegrationService {
 
+    private static final Logger log = LoggerFactory.getLogger(AiIntegrationService.class);
     private final RestTemplate restTemplate;
 
     public AiIntegrationService() {
