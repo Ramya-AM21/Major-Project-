@@ -423,6 +423,11 @@ IMPORTANT RULES:
 
 
 def normalize_ai_food_response(ai_data, source):
+    if isinstance(ai_data, list):
+        ai_data = ai_data[0] if ai_data else {}
+    if not isinstance(ai_data, dict):
+        ai_data = {}
+
     food_items = ai_data.get("food_items", [])
 
     if not isinstance(food_items, list):
@@ -697,7 +702,7 @@ async def analyze_food(image: UploadFile = File(...)):
         gemini_key = os.getenv("GEMINI_API_KEY")
 
         if gemini_key:
-            models_to_try = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
+            models_to_try = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash"]
             image_b64 = base64.b64encode(content).decode("utf-8")
             mime_type = image.content_type or "image/jpeg"
             prompt = build_food_ai_prompt("")
