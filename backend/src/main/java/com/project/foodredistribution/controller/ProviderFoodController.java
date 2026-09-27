@@ -27,11 +27,10 @@ public class ProviderFoodController {
             throw new IllegalArgumentException("Uploaded file cannot be empty");
         }
         
-        // Validate MIME type (jpg, jpeg, png, webp)
+        // Validate MIME type permissive check
         String contentType = file.getContentType();
-        if (contentType == null || (!contentType.equals("image/jpeg") && !contentType.equals("image/png") 
-                && !contentType.equals("image/webp") && !contentType.equals("image/jpg"))) {
-            throw new IllegalArgumentException("Unsupported file type: " + contentType);
+        if (contentType != null && !contentType.startsWith("image/") && !contentType.equals("application/octet-stream")) {
+            System.out.println("[WARN] Processing non-standard content-type: " + contentType);
         }
         
         // Validate size (10MB limit)

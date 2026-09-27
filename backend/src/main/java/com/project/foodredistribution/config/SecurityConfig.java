@@ -47,8 +47,9 @@ public class SecurityConfig {
                 .requestMatchers("/", "/api", "/api/health").permitAll()
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
-                .requestMatchers("/api/v1/zones/**").permitAll() // Simple lookup can be public for maps
-                .requestMatchers("/api/v1/analytics/admin/summary").permitAll() // public stats for landing page if needed
+                .requestMatchers("/api/v1/zones/**").permitAll()
+                .requestMatchers("/api/v1/sessions/**").permitAll()
+                .requestMatchers("/api/v1/analytics/admin/summary").permitAll()
                 .requestMatchers("/api/v1/food/analyze-image", "/api/provider/food/analyze-image").permitAll()
                 .requestMatchers("/ws/tracking/**").permitAll()
                 .requestMatchers("/uploads/**").permitAll()
@@ -85,14 +86,16 @@ public class SecurityConfig {
         }
         
         // Auto-allow all Vercel domains and local dev instances
+        patterns.add("https://foodbridgeee.vercel.app");
         patterns.add("https://*.vercel.app");
         patterns.add("http://localhost:*");
         patterns.add("http://127.0.0.1:*");
+        patterns.add("*");
         
         configuration.setAllowedOriginPatterns(patterns);
         configuration.setAllowCredentials(true);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "x-auth-token", "Accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setExposedHeaders(Arrays.asList("x-auth-token", "Authorization"));
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
