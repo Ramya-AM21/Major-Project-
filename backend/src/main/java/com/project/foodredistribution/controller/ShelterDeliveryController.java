@@ -252,4 +252,13 @@ public class ShelterDeliveryController {
         }
         return ResponseEntity.ok(list);
     }
+
+    @GetMapping("/volunteer/deliveries/{id}/demo-otp")
+    @PreAuthorize("hasRole('VOLUNTEER') or hasRole('COORDINATOR')")
+    public ResponseEntity<Map<String, String>> getShelterDemoOtp(@PathVariable UUID id) {
+        DeliveryAssignment assignment = shelterDeliveryService.getAssignmentById(id);
+        Map<String, String> map = new HashMap<>();
+        map.put("otp", assignment.getOtp());
+        return ResponseEntity.ok(map);
+    }
 }

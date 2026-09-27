@@ -118,4 +118,14 @@ public class VerificationController {
         }
         return ResponseEntity.ok(verification);
     }
+
+    @GetMapping("/task/{taskId}/demo-otp")
+    public ResponseEntity<java.util.Map<String, String>> getDemoOtp(@PathVariable UUID taskId) {
+        Verification verification = verificationRepository.findByTaskId(taskId)
+                .orElseThrow(() -> new com.project.foodredistribution.exception.ResourceNotFoundException("Verification record not found for taskId: " + taskId));
+        java.util.Map<String, String> map = new java.util.HashMap<>();
+        map.put("pickupOtp", verification.getPickupOtp());
+        map.put("deliveryOtp", verification.getDeliveryOtp());
+        return ResponseEntity.ok(map);
+    }
 }

@@ -563,4 +563,9 @@ public class ShelterDeliveryService {
     public List<DeliveryAssignment> getCoordinatorDeliveries(String coordinatorEmail) {
         return deliveryAssignmentRepository.findByFoodRequirementCoordinatorEmail(coordinatorEmail);
     }
+
+    public DeliveryAssignment getAssignmentById(UUID id) {
+        return deliveryAssignmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Assignment not found: " + id));
+    }
 }
