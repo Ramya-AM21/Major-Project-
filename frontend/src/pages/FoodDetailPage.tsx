@@ -332,7 +332,7 @@ export const FoodDetailPage: React.FC = () => {
               </div>
 
               {/* OTP presentation for Provider screen */}
-              {verification?.pickupOtp && (listing.status === 'AVAILABLE' || listing.status === 'MATCHED' || listing.status === 'ACCEPTED' || listing.status === 'NAVIGATING_TO_PICKUP' || listing.status === 'ARRIVED_AT_PICKUP') && (
+              {verification?.pickupOtp ? (
                 <div className="p-4 bg-brand-50 border border-brand-100 rounded-xl text-center">
                   <span className="text-[9px] uppercase font-bold tracking-wider text-brand-700 block">Pickup Security OTP</span>
                   <span className="text-xl font-mono font-black text-brand-650 tracking-widest mt-1 block">
@@ -340,6 +340,13 @@ export const FoodDetailPage: React.FC = () => {
                   </span>
                   <span className="text-[10px] text-brand-600 block mt-1.5 font-semibold">
                     Provide this code to the volunteer upon hand-off.
+                  </span>
+                </div>
+              ) : (listing.status === 'ACCEPTED' || listing.status === 'NAVIGATING_TO_PICKUP') && (
+                <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-center space-y-1">
+                  <span className="text-[9px] uppercase font-bold tracking-wider text-gray-500 block">Pickup Security OTP</span>
+                  <span className="text-xs text-gray-600 font-medium block">
+                    🔒 OTP code will activate here when the volunteer arrives within the 100m kitchen geofence.
                   </span>
                 </div>
               )}

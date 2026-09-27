@@ -364,16 +364,13 @@ public class ShelterDeliveryService {
         req.setStatus("ASSIGNED");
         foodRequirementRepository.save(req);
 
-        // Create assignment
+        // Create assignment without OTP (OTP is generated only upon geofence arrival)
         DeliveryAssignment assignment = new DeliveryAssignment();
         assignment.setFoodRequirement(req);
         assignment.setVolunteer(volunteer);
         assignment.setStatus("ASSIGNED");
-        
-        // Generate secure 6-digit OTP using SecureRandom
-        int otpCode = 100000 + secureRandom.nextInt(900000);
-        assignment.setOtp(String.valueOf(otpCode));
-        assignment.setOtpExpiry(LocalDateTime.now().plusHours(2)); // 2 hours expiration window
+        assignment.setOtp(null);
+        assignment.setOtpExpiry(null);
         assignment.setOtpAttempts(0);
 
         DeliveryAssignment saved = deliveryAssignmentRepository.save(assignment);
@@ -415,23 +412,32 @@ public class ShelterDeliveryService {
             throw new IllegalArgumentException("You are not authorized for this assignment.");
         }
 
+        if (currentLat == null || currentLat < -90.0 || currentLat > 90.0 || currentLng == null || currentLng < -180.0 || currentLng > 180.0) {
+            throw new IllegalArgumentException("GPS coordinates are required to verify arrival at shelter location.");
+        }
+
         Shelter shelter = assignment.getFoodRequirement().getShelter();
         double distanceKm = matchingService.calculateDistance(currentLat, currentLng, shelter.getLatitude(), shelter.getLongitude());
         double allowedRadiusKm = geofenceRadiusMeters / 1000.0;
 
         if (distanceKm > allowedRadiusKm) {
-            throw new IllegalArgumentException("You are not at the registered delivery location. You are currently " + 
-                    Math.round(distanceKm * 1000) + "m away. Allowed radius is " + (int) geofenceRadiusMeters + "m.");
+            throw new IllegalArgumentException("Geofence check failed: You are currently " + 
+                    Math.round(distanceKm * 1000) + "m away from the shelter. You must be within " + (int) geofenceRadiusMeters + "m to enable arrival and OTP generation.");
         }
 
+        // Geofence check PASSED -> Generate OTP and transition status to ARRIVED
+        int otpCode = 100000 + secureRandom.nextInt(900000);
+        assignment.setOtp(String.valueOf(otpCode));
+        assignment.setOtpExpiry(LocalDateTime.now().plusHours(2));
+        assignment.setOtpAttempts(0);
         assignment.setStatus("ARRIVED");
         assignment.setArrivalTimestamp(LocalDateTime.now());
         assignment.setUpdatedAt(LocalDateTime.now());
         DeliveryAssignment saved = deliveryAssignmentRepository.save(assignment);
 
-        auditLogService.log(volunteerEmail, "VOLUNTEER", "DELIVERY_ARRIVED", "DeliveryAssignment", assignmentId.toString(), "Volunteer arrived within shelter geofence");
+        auditLogService.log(volunteerEmail, "VOLUNTEER", "DELIVERY_ARRIVED", "DeliveryAssignment", assignmentId.toString(), "Volunteer verified arrival within shelter geofence. Handover OTP generated.");
         
-        // Notify coordinator with the OTP code
+        // Notify coordinator with the generated OTP code
         notificationService.sendNotification(
                 assignment.getFoodRequirement().getCoordinator().getEmail(),
                 "Volunteer Arrived - Share OTP",
@@ -443,6 +449,11 @@ public class ShelterDeliveryService {
 
     @Transactional
     public DeliveryAssignment verifyOtp(UUID assignmentId, String volunteerEmail, String otp) {
+        return verifyOtp(assignmentId, volunteerEmail, otp, null, null);
+    }
+
+    @Transactional
+    public DeliveryAssignment verifyOtp(UUID assignmentId, String volunteerEmail, String otp, Double currentLat, Double currentLng) {
         DeliveryAssignment assignment = deliveryAssignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Assignment not found: " + assignmentId));
 
@@ -450,11 +461,25 @@ public class ShelterDeliveryService {
             throw new IllegalArgumentException("You are not authorized for this assignment.");
         }
 
+        if (currentLat != null && currentLng != null) {
+            Shelter shelter = assignment.getFoodRequirement().getShelter();
+            double distanceKm = matchingService.calculateDistance(currentLat, currentLng, shelter.getLatitude(), shelter.getLongitude());
+            double allowedRadiusKm = geofenceRadiusMeters / 1000.0;
+            if (distanceKm > allowedRadiusKm) {
+                throw new IllegalArgumentException("Geofence check failed: You are currently " + 
+                        Math.round(distanceKm * 1000) + "m away. You must be within " + (int) geofenceRadiusMeters + "m to verify handover.");
+            }
+        }
+
+        if (assignment.getOtp() == null || assignment.getOtp().trim().isEmpty()) {
+            throw new IllegalArgumentException("Handover OTP has not been generated yet. Arrival within " + (int) geofenceRadiusMeters + "m geofence is required.");
+        }
+
         if (assignment.getOtpAttempts() >= 3) {
             throw new IllegalArgumentException("Too many invalid OTP attempts. Handover verification locked.");
         }
 
-        if (LocalDateTime.now().isAfter(assignment.getOtpExpiry())) {
+        if (assignment.getOtpExpiry() != null && LocalDateTime.now().isAfter(assignment.getOtpExpiry())) {
             throw new IllegalArgumentException("Handover OTP code has expired.");
         }
 

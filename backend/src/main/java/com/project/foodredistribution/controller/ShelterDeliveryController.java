@@ -204,10 +204,12 @@ public class ShelterDeliveryController {
     @PreAuthorize("hasRole('VOLUNTEER')")
     public ResponseEntity<DeliveryAssignment> verifyOtp(
             @PathVariable UUID id,
-            @RequestBody Map<String, String> payload,
+            @RequestBody Map<String, Object> payload,
             Principal principal) {
-        String otp = payload.get("otp");
-        DeliveryAssignment verified = shelterDeliveryService.verifyOtp(id, principal.getName(), otp);
+        String otp = (String) payload.get("otp");
+        Double currentLat = payload.get("currentLat") != null ? Double.valueOf(payload.get("currentLat").toString()) : null;
+        Double currentLng = payload.get("currentLng") != null ? Double.valueOf(payload.get("currentLng").toString()) : null;
+        DeliveryAssignment verified = shelterDeliveryService.verifyOtp(id, principal.getName(), otp, currentLat, currentLng);
         return ResponseEntity.ok(verified);
     }
 
@@ -252,14 +254,5 @@ public class ShelterDeliveryController {
             assignment.setOtp(null); // Mask OTP code for volunteer
         }
         return ResponseEntity.ok(list);
-    }
-
-    @GetMapping("/volunteer/deliveries/{id}/demo-otp")
-    @PreAuthorize("hasRole('VOLUNTEER') or hasRole('COORDINATOR')")
-    public ResponseEntity<Map<String, String>> getShelterDemoOtp(@PathVariable UUID id) {
-        DeliveryAssignment assignment = shelterDeliveryService.getAssignmentById(id);
-        Map<String, String> map = new HashMap<>();
-        map.put("otp", assignment.getOtp());
-        return ResponseEntity.ok(map);
     }
 }

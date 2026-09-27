@@ -117,8 +117,14 @@ public class DeliveryTaskController {
 
     @PostMapping("/{id}/arrive-pickup")
     @PreAuthorize("hasRole('VOLUNTEER')")
-    public ResponseEntity<DeliveryTask> arrivePickup(@PathVariable UUID id, Principal principal) {
-        DeliveryTask task = deliveryTaskService.arrivePickup(id, principal.getName());
+    public ResponseEntity<DeliveryTask> arrivePickup(
+            @PathVariable UUID id,
+            @RequestBody(required = false) java.util.Map<String, Double> payload,
+            Principal principal) {
+        Double lat = payload != null ? payload.get("latitude") : null;
+        Double lng = payload != null ? payload.get("longitude") : null;
+        Double accuracy = payload != null ? payload.get("accuracy") : null;
+        DeliveryTask task = deliveryTaskService.arrivePickup(id, principal.getName(), lat, lng, accuracy);
         return ResponseEntity.ok(task);
     }
 
@@ -131,8 +137,14 @@ public class DeliveryTaskController {
 
     @PostMapping("/{id}/arrive-delivery")
     @PreAuthorize("hasRole('VOLUNTEER')")
-    public ResponseEntity<DeliveryTask> arriveDelivery(@PathVariable UUID id, Principal principal) {
-        DeliveryTask task = deliveryTaskService.arriveDelivery(id, principal.getName());
+    public ResponseEntity<DeliveryTask> arriveDelivery(
+            @PathVariable UUID id,
+            @RequestBody(required = false) java.util.Map<String, Double> payload,
+            Principal principal) {
+        Double lat = payload != null ? payload.get("latitude") : null;
+        Double lng = payload != null ? payload.get("longitude") : null;
+        Double accuracy = payload != null ? payload.get("accuracy") : null;
+        DeliveryTask task = deliveryTaskService.arriveDelivery(id, principal.getName(), lat, lng, accuracy);
         return ResponseEntity.ok(task);
     }
 }

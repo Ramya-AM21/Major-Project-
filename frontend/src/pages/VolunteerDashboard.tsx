@@ -124,46 +124,6 @@ export const VolunteerDashboard: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [submittingProof, setSubmittingProof] = useState(false);
   
-  // Demo Helper OTP state
-  const [showDemoPickupOtp, setShowDemoPickupOtp] = useState(false);
-  const [demoPickupCode, setDemoPickupCode] = useState<string | null>(null);
-  const [showDemoDeliveryOtp, setShowDemoDeliveryOtp] = useState(false);
-  const [demoDeliveryCode, setDemoDeliveryCode] = useState<string | null>(null);
-  const [showDemoShelterOtp, setShowDemoShelterOtp] = useState(false);
-  const [demoShelterCode, setDemoShelterCode] = useState<string | null>(null);
-
-  const fetchDemoPickupOtp = async () => {
-    if (!activeTask) return;
-    try {
-      const res = await axios.get(`/api/v1/verification/task/${activeTask.id}/demo-otp`);
-      setDemoPickupCode(res.data.pickupOtp || 'N/A');
-      setShowDemoPickupOtp(!showDemoPickupOtp);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const fetchDemoDeliveryOtp = async () => {
-    if (!activeTask) return;
-    try {
-      const res = await axios.get(`/api/v1/verification/task/${activeTask.id}/demo-otp`);
-      setDemoDeliveryCode(res.data.deliveryOtp || 'N/A');
-      setShowDemoDeliveryOtp(!showDemoDeliveryOtp);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const fetchDemoShelterOtp = async (id: string) => {
-    try {
-      const res = await axios.get(`/api/v1/volunteer/deliveries/${id}/demo-otp`);
-      setDemoShelterCode(res.data.otp || 'N/A');
-      setShowDemoShelterOtp(!showDemoShelterOtp);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-  
   // Geolocation settings
   const [currentLat, setCurrentLat] = useState<number | null>(null);
   const [currentLng, setCurrentLng] = useState<number | null>(null);
@@ -740,12 +700,20 @@ export const VolunteerDashboard: React.FC = () => {
   // State Machine transition: arrived at kitchen
   const handleArrivePickup = async () => {
     if (!activeTask) return;
+    if (currentLat === null || currentLng === null) {
+      setErrorStatus("GPS location is required to verify arrival at pickup location.");
+      return;
+    }
     try {
       setErrorStatus(null);
-      await axios.post(`/api/v1/tasks/${activeTask.id}/arrive-pickup`);
+      await axios.post(`/api/v1/tasks/${activeTask.id}/arrive-pickup`, {
+        latitude: currentLat,
+        longitude: currentLng,
+        accuracy: gpsAccuracy
+      });
       fetchVolunteerData();
     } catch (err: any) {
-      setErrorStatus(err.response?.data?.message || 'Could not update arrival status.');
+      setErrorStatus(err.response?.data?.message || 'Could not verify geofence arrival at kitchen.');
     }
   };
 
@@ -764,12 +732,20 @@ export const VolunteerDashboard: React.FC = () => {
   // State Machine transition: arrived at shelter
   const handleArriveDelivery = async () => {
     if (!activeTask) return;
+    if (currentLat === null || currentLng === null) {
+      setErrorStatus("GPS location is required to verify arrival at destination shelter.");
+      return;
+    }
     try {
       setErrorStatus(null);
-      await axios.post(`/api/v1/tasks/${activeTask.id}/arrive-delivery`);
+      await axios.post(`/api/v1/tasks/${activeTask.id}/arrive-delivery`, {
+        latitude: currentLat,
+        longitude: currentLng,
+        accuracy: gpsAccuracy
+      });
       fetchVolunteerData();
     } catch (err: any) {
-      setErrorStatus(err.response?.data?.message || 'Could not update destination arrival.');
+      setErrorStatus(err.response?.data?.message || 'Could not verify geofence arrival at shelter.');
     }
   };
 
@@ -800,6 +776,10 @@ export const VolunteerDashboard: React.FC = () => {
   };
 
   const handleArriveShelterDelivery = async (id: string) => {
+    if (currentLat === null || currentLng === null) {
+      alert("GPS location is required to verify arrival at shelter.");
+      return;
+    }
     try {
       await axios.post(`/api/v1/volunteer/deliveries/${id}/arrive`, {
         currentLat,
@@ -819,7 +799,9 @@ export const VolunteerDashboard: React.FC = () => {
     }
     try {
       await axios.post(`/api/v1/volunteer/deliveries/${id}/verify-otp`, {
-        otp: shelterOtp
+        otp: shelterOtp,
+        currentLat,
+        currentLng
       });
       alert("OTP Handover verified! Please take a photo proof to complete delivery.");
       setShelterOtp('');
@@ -1369,25 +1351,8 @@ export const VolunteerDashboard: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="pt-2 border-t border-gray-200 space-y-1.5 text-[11px]">
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span><strong className="text-brand-900">Real Production Flow:</strong> Food Provider (<strong>{activeTask.foodListing.provider?.businessName || 'Kitchen Staff'}</strong>) reads the 6-digit OTP code from their dashboard screen and gives it to you.</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-1">
-                      <span className="text-[10px] text-gray-500 font-medium">Single-device testing mode:</span>
-                      <button 
-                        type="button" 
-                        onClick={fetchDemoPickupOtp}
-                        className="text-[10px] font-bold text-brand-650 hover:text-brand-800 underline bg-brand-50 px-2.5 py-1 rounded border border-brand-200 whitespace-nowrap"
-                      >
-                        {showDemoPickupOtp ? 'Hide Demo Code' : '🔑 Reveal Demo OTP (Testing)'}
-                      </button>
-                    </div>
-                    {showDemoPickupOtp && demoPickupCode && (
-                      <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg font-mono text-center font-bold">
-                        Provider Kitchen OTP: <span className="text-sm tracking-widest text-brand-750 font-black">{demoPickupCode}</span>
-                      </div>
-                    )}
+                  <div className="pt-2 border-t border-gray-200 text-[11px] text-gray-600">
+                    <span><strong className="text-brand-900">Handover Protocol:</strong> Food Provider (<strong>{activeTask.foodListing.provider?.businessName || 'Kitchen Staff'}</strong>) receives the 6-digit OTP on their order screen once you are within the 100m geofence. Request the code from staff upon arrival.</span>
                   </div>
                 </div>
               )}
@@ -1452,25 +1417,8 @@ export const VolunteerDashboard: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="pt-2 border-t border-gray-200 space-y-1.5 text-[11px]">
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span><strong className="text-brand-900">Real Production Flow:</strong> Shelter Coordinator at <strong>{activeTask.zone.name}</strong> reads the 6-digit Drop-off OTP from their dashboard and gives it to you.</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-1">
-                      <span className="text-[10px] text-gray-500 font-medium">Single-device testing mode:</span>
-                      <button 
-                        type="button" 
-                        onClick={fetchDemoDeliveryOtp}
-                        className="text-[10px] font-bold text-brand-650 hover:text-brand-800 underline bg-brand-50 px-2.5 py-1 rounded border border-brand-200 whitespace-nowrap"
-                      >
-                        {showDemoDeliveryOtp ? 'Hide Demo Code' : '🔑 Reveal Demo OTP (Testing)'}
-                      </button>
-                    </div>
-                    {showDemoDeliveryOtp && demoDeliveryCode && (
-                      <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg font-mono text-center font-bold">
-                        Drop-off OTP Code: <span className="text-sm tracking-widest text-brand-750 font-black">{demoDeliveryCode}</span>
-                      </div>
-                    )}
+                  <div className="pt-2 border-t border-gray-200 text-[11px] text-gray-600">
+                    <span><strong className="text-brand-900">Handover Protocol:</strong> Shelter Coordinator at <strong>{activeTask.zone.name}</strong> receives the 6-digit Drop-off OTP on their dashboard once you are within the 100m geofence. Request the code from the coordinator upon arrival.</span>
                   </div>
                 </div>
               )}
@@ -1719,22 +1667,6 @@ export const VolunteerDashboard: React.FC = () => {
                         Verify OTP
                       </button>
                     </div>
-
-                    <div className="pt-2 border-t border-gray-200 flex justify-between items-center text-[11px]">
-                      <span className="text-gray-500 font-medium">Single-device testing mode:</span>
-                      <button 
-                        type="button" 
-                        onClick={() => fetchDemoShelterOtp(activeShelterTask.id)}
-                        className="text-[10px] font-bold text-brand-650 hover:text-brand-800 underline bg-brand-50 px-2.5 py-1 rounded border border-brand-200 whitespace-nowrap"
-                      >
-                        {showDemoShelterOtp ? 'Hide Demo Code' : '🔑 Reveal Demo OTP (Testing)'}
-                      </button>
-                    </div>
-                    {showDemoShelterOtp && demoShelterCode && (
-                      <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg font-mono text-center font-bold">
-                        Shelter Handover OTP: <span className="text-sm tracking-widest text-brand-750 font-black">{demoShelterCode}</span>
-                      </div>
-                    )}
                   </div>
                 )}
 

@@ -452,9 +452,15 @@ export const CoordinatorDashboard: React.FC = () => {
                         <span className="text-xs text-gray-400 font-mono">Assignment ID: {del.id.substring(0, 8)}...</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-bold text-brand-650 bg-brand-50 px-2.5 py-1 rounded border border-brand-200">
-                          Handover OTP: {del.otp}
-                        </span>
+                        {del.otp ? (
+                          <span className="text-xs font-mono font-bold text-brand-650 bg-brand-50 px-2.5 py-1 rounded border border-brand-200">
+                            Handover OTP: {del.otp}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-medium text-gray-500 bg-gray-50 px-2.5 py-1 rounded border border-gray-200">
+                            🔒 OTP activates on geofence arrival
+                          </span>
+                        )}
                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusColor(del.status)}`}>
                           {del.status}
                         </span>

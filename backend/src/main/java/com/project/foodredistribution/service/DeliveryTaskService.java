@@ -130,11 +130,11 @@ public class DeliveryTaskService {
 
         task = deliveryTaskRepository.save(task);
 
-        // Pre-create Verification record
+        // Pre-create Verification record without OTPs (OTPs are generated only upon geofence arrival)
         Verification verification = new Verification();
         verification.setTask(task);
-        verification.setPickupOtp(generateOtp());
-        verification.setDeliveryOtp(generateOtp());
+        verification.setPickupOtp(null);
+        verification.setDeliveryOtp(null);
         verification.setVerificationConfidence(1.0);
         verificationRepository.save(verification);
 
@@ -231,14 +231,12 @@ public class DeliveryTaskService {
         food.setStatus("ACCEPTED");
         foodListingRepository.save(food);
 
-        // Regenerate fresh SecureRandom OTPs and set 2-hour expiry for the accepted transaction
+        // Reset verification state (OTPs are generated only upon geofence arrival)
         Optional<Verification> oVer = verificationRepository.findByTaskId(taskId);
         if (oVer.isPresent()) {
             Verification verification = oVer.get();
-            verification.setPickupOtp(generateOtp());
-            verification.setDeliveryOtp(generateOtp());
-            verification.setPickupOtpExpiry(LocalDateTime.now().plusHours(2));
-            verification.setDeliveryOtpExpiry(LocalDateTime.now().plusHours(2));
+            verification.setPickupOtp(null);
+            verification.setDeliveryOtp(null);
             verification.setPickupOtpAttempts(0);
             verification.setDeliveryOtpAttempts(0);
             verification.setPickupTimestamp(null);
@@ -343,7 +341,12 @@ public class DeliveryTaskService {
             throw new IllegalArgumentException("Task must be at pickup location before verification. Current status: " + task.getStatus());
         }
 
-        // 6. Expiry check
+        // 6. OTP existence check
+        if (verification.getPickupOtp() == null || verification.getPickupOtp().trim().isEmpty()) {
+            throw new IllegalArgumentException("Pickup OTP has not been generated yet. You must be within " + (int)pickupArrivalRadiusMeters + "m of the provider kitchen to trigger arrival and OTP generation.");
+        }
+
+        // 7. Expiry check
         if (verification.getPickupOtpExpiry() != null && LocalDateTime.now().isAfter(verification.getPickupOtpExpiry())) {
             throw new IllegalArgumentException("Pickup OTP code has expired.");
         }
@@ -452,7 +455,12 @@ public class DeliveryTaskService {
             throw new IllegalArgumentException("Task must be at destination location before verification. Current status: " + task.getStatus());
         }
 
-        // 6. Expiry check
+        // 6. OTP existence check
+        if (verification.getDeliveryOtp() == null || verification.getDeliveryOtp().trim().isEmpty()) {
+            throw new IllegalArgumentException("Drop-off OTP has not been generated yet. You must be within " + (int)destinationArrivalRadiusMeters + "m of the destination shelter to trigger arrival and OTP generation.");
+        }
+
+        // 7. Expiry check
         if (verification.getDeliveryOtpExpiry() != null && LocalDateTime.now().isAfter(verification.getDeliveryOtpExpiry())) {
             throw new IllegalArgumentException("Delivery OTP code has expired.");
         }
@@ -988,14 +996,65 @@ public class DeliveryTaskService {
 
     @Transactional
     public DeliveryTask arrivePickup(UUID taskId, String volunteerEmail) {
+        return arrivePickup(taskId, volunteerEmail, null, null, null);
+    }
+
+    @Transactional
+    public DeliveryTask arrivePickup(UUID taskId, String volunteerEmail, Double latitude, Double longitude, Double accuracy) {
         DeliveryTask task = getById(taskId);
         if (!"NAVIGATING_TO_PICKUP".equals(task.getStatus()) && !"ACCEPTED".equals(task.getStatus())) {
             throw new IllegalArgumentException("Task must be in navigating or accepted state to arrive at pickup. Current status: " + task.getStatus());
         }
+
+        if (volunteerEmail != null) {
+            if (task.getVolunteer() == null || !task.getVolunteer().getUser().getEmail().equals(volunteerEmail)) {
+                throw new IllegalArgumentException("You are not authorized for this delivery task.");
+            }
+        }
+
+        // Validate GPS coordinates bounds
+        if (latitude == null || latitude < -90.0 || latitude > 90.0 || longitude == null || longitude < -180.0 || longitude > 180.0) {
+            throw new IllegalArgumentException("GPS location is required to verify arrival at pickup location.");
+        }
+
+        // Validate GPS accuracy threshold
+        if (accuracy != null && accuracy > gpsAccuracyThresholdMeters) {
+            throw new IllegalArgumentException("Cannot confirm arrival. GPS accuracy is too poor (" + Math.round(accuracy) + "m). Please try again in an area with a clearer GPS signal.");
+        }
+
+        // Backend Geofence Validation
+        FoodListing food = task.getFoodListing();
+        double distanceToPickupKm = matchingService.calculateDistance(latitude, longitude, food.getPickupLatitude(), food.getPickupLongitude());
+        double allowedRadiusKm = pickupArrivalRadiusMeters / 1000.0;
+
+        if (distanceToPickupKm > allowedRadiusKm) {
+            throw new IllegalArgumentException("Geofence check failed: You are currently " + Math.round(distanceToPickupKm * 1000) + "m away from the pickup location. You must be within " + (int)pickupArrivalRadiusMeters + "m to enable arrival and OTP generation.");
+        }
+
+        // Geofence check PASSED -> Generate Pickup OTP and transition status to ARRIVED_AT_PICKUP
+        Verification verification = verificationRepository.findByTaskId(taskId)
+                .orElseGet(() -> {
+                    Verification v = new Verification();
+                    v.setTask(task);
+                    return v;
+                });
+
+        verification.setPickupOtp(generateOtp()); // SecureRandom 6-digit OTP!
+        verification.setPickupOtpExpiry(LocalDateTime.now().plusHours(2));
+        verification.setPickupOtpAttempts(0);
+        verificationRepository.save(verification);
+
         task.setStatus("ARRIVED_AT_PICKUP");
         DeliveryTask saved = deliveryTaskRepository.save(task);
-        auditLogService.log(volunteerEmail, "VOLUNTEER", "ARRIVED_AT_PICKUP", "DeliveryTask", taskId.toString(), "Arrived at provider kitchen location");
+
+        auditLogService.log(volunteerEmail, "VOLUNTEER", "ARRIVED_AT_PICKUP", "DeliveryTask", taskId.toString(), "Verified arrival at provider kitchen within " + (int)pickupArrivalRadiusMeters + "m geofence. Pickup OTP generated.");
+        notificationService.sendNotification(
+            food.getProvider().getUser().getEmail(),
+            "Volunteer Arrived at Kitchen",
+            "Volunteer " + task.getVolunteer().getUser().getName() + " has arrived at your kitchen location. Pickup OTP code is now active on your order screen."
+        );
         webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "ARRIVED_AT_PICKUP"));
+
         return saved;
     }
 
@@ -1014,14 +1073,65 @@ public class DeliveryTaskService {
 
     @Transactional
     public DeliveryTask arriveDelivery(UUID taskId, String volunteerEmail) {
+        return arriveDelivery(taskId, volunteerEmail, null, null, null);
+    }
+
+    @Transactional
+    public DeliveryTask arriveDelivery(UUID taskId, String volunteerEmail, Double latitude, Double longitude, Double accuracy) {
         DeliveryTask task = getById(taskId);
         if (!"NAVIGATING_TO_DESTINATION".equals(task.getStatus()) && !"PICKED_UP".equals(task.getStatus())) {
             throw new IllegalArgumentException("Task must be navigating or picked up to arrive at delivery. Current status: " + task.getStatus());
         }
+
+        if (volunteerEmail != null) {
+            if (task.getVolunteer() == null || !task.getVolunteer().getUser().getEmail().equals(volunteerEmail)) {
+                throw new IllegalArgumentException("You are not authorized for this delivery task.");
+            }
+        }
+
+        // Validate GPS coordinates bounds
+        if (latitude == null || latitude < -90.0 || latitude > 90.0 || longitude == null || longitude < -180.0 || longitude > 180.0) {
+            throw new IllegalArgumentException("GPS location is required to verify arrival at destination shelter.");
+        }
+
+        // Validate GPS accuracy threshold
+        if (accuracy != null && accuracy > gpsAccuracyThresholdMeters) {
+            throw new IllegalArgumentException("Cannot confirm arrival. GPS accuracy is too poor (" + Math.round(accuracy) + "m). Please try again in an area with a clearer GPS signal.");
+        }
+
+        // Backend Geofence Validation
+        Zone zone = task.getZone();
+        double distanceToZoneKm = matchingService.calculateDistance(latitude, longitude, zone.getLatitude(), zone.getLongitude());
+        double allowedRadiusKm = destinationArrivalRadiusMeters / 1000.0;
+
+        if (distanceToZoneKm > allowedRadiusKm) {
+            throw new IllegalArgumentException("Geofence check failed: You are currently " + Math.round(distanceToZoneKm * 1000) + "m away from the destination shelter. You must be within " + (int)destinationArrivalRadiusMeters + "m to enable drop-off arrival and OTP generation.");
+        }
+
+        // Geofence check PASSED -> Generate Drop-off OTP and transition status to ARRIVED_AT_DESTINATION
+        Verification verification = verificationRepository.findByTaskId(taskId)
+                .orElseGet(() -> {
+                    Verification v = new Verification();
+                    v.setTask(task);
+                    return v;
+                });
+
+        verification.setDeliveryOtp(generateOtp()); // SecureRandom 6-digit OTP!
+        verification.setDeliveryOtpExpiry(LocalDateTime.now().plusHours(2));
+        verification.setDeliveryOtpAttempts(0);
+        verificationRepository.save(verification);
+
         task.setStatus("ARRIVED_AT_DESTINATION");
         DeliveryTask saved = deliveryTaskRepository.save(task);
-        auditLogService.log(volunteerEmail, "VOLUNTEER", "ARRIVED_AT_DESTINATION", "DeliveryTask", taskId.toString(), "Arrived at destination shelter location");
+
+        auditLogService.log(volunteerEmail, "VOLUNTEER", "ARRIVED_AT_DESTINATION", "DeliveryTask", taskId.toString(), "Verified arrival at destination shelter within " + (int)destinationArrivalRadiusMeters + "m geofence. Drop-off OTP generated.");
+        notificationService.sendNotification(
+            task.getFoodListing().getProvider().getUser().getEmail(),
+            "Volunteer Arrived at Shelter",
+            "Volunteer has reached the community destination shelter."
+        );
         webSocketHandler.broadcastUpdate("TASK_UPDATE", String.format("{\"id\":\"%s\",\"status\":\"%s\"}", taskId, "ARRIVED_AT_DESTINATION"));
+
         return saved;
     }
 
