@@ -109,12 +109,12 @@ export const VolunteerDashboard: React.FC = () => {
   const [sessionConfig, setSessionConfig] = useState<any>(null);
 
   const [vStats, setVStats] = useState({
-    rating: 4.9,
-    completedDeliveries: 14,
-    successfulDeliveries: 14,
+    rating: 5.0,
+    completedDeliveries: 0,
+    successfulDeliveries: 0,
     reliabilityScore: 1.0,
-    mealsDelivered: 128,
-    tokens: 370
+    mealsDelivered: 0,
+    tokens: 0
   });
 
   // Verification Input parameters
@@ -541,7 +541,7 @@ export const VolunteerDashboard: React.FC = () => {
 
   // WebSockets synchronization
   useEffect(() => {
-    const wsBaseUrl = import.meta.env.VITE_WS_URL;
+    const wsBaseUrl = import.meta.env.VITE_WS_URL || (import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace(/^http/, 'ws') : null);
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = wsBaseUrl 
       ? `${wsBaseUrl}/ws/tracking` 

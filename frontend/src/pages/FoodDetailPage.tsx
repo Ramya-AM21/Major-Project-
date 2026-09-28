@@ -93,7 +93,7 @@ export const FoodDetailPage: React.FC = () => {
     fetchDetails();
     const timer = setInterval(() => setNowTime(new Date()), 1000);
     
-    const wsBaseUrl = import.meta.env.VITE_WS_URL;
+    const wsBaseUrl = import.meta.env.VITE_WS_URL || (import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace(/^http/, 'ws') : null);
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = wsBaseUrl 
       ? `${wsBaseUrl}/ws/tracking` 

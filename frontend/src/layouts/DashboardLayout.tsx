@@ -86,7 +86,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     if (!user) return;
     fetchNotifications();
 
-    const wsBaseUrl = import.meta.env.VITE_WS_URL;
+    const wsBaseUrl = import.meta.env.VITE_WS_URL || (import.meta.env.VITE_API_BASE_URL ? import.meta.env.VITE_API_BASE_URL.replace(/^http/, 'ws') : null);
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = wsBaseUrl 
       ? `${wsBaseUrl}/ws/tracking` 
