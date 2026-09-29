@@ -626,7 +626,7 @@ def analyze_image_dynamically(content: bytes, filename: str) -> dict:
                             return True
                         if not any(c in w_clean for c in "aeiouy"):
                             return True
-                        junk = ["img", "photo", "pic", "image", "wp", "whatsapp", "signal", "media", "upload", "temp", "blob", "file", "fjpcycdamamt"]
+                        junk = ["img", "photo", "pic", "image", "wp", "whatsapp", "signal", "media", "upload", "temp", "blob", "file", "download", "downloads", "doc", "document", "scan", "attachment", "screenshot", "capture", "fjpcycdamamt"]
                         if any(j in w_clean for j in junk):
                             return True
                         consonants = sum(1 for c in w_clean if c in "bcdfghjklmnpqrstvwxyz")
@@ -635,7 +635,7 @@ def analyze_image_dynamically(content: bytes, filename: str) -> dict:
                         return False
 
                     valid_words = [w.capitalize() for w in clean_fn.split() if not is_junk_word(w)]
-                    title = " ".join(valid_words[:3]) if valid_words else "Assorted Prepared Meal"
+                    title = " ".join(valid_words[:3]) if valid_words else "Assorted Prepared Surplus Meal"
                     matched_name = f"{title}"
                     matched_cat = "Cooked Meal"
                     matched_type = "Vegetarian"
@@ -703,8 +703,15 @@ async def analyze_food(image: UploadFile = File(...)):
 
         if gemini_key:
             models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-lite"]
-            image_b64 = base64.b64encode(content).decode("utf-8")
             mime_type = image.content_type or "image/jpeg"
+            if not mime_type.startswith("image/") or mime_type == "image/jpg":
+                if (filename or "").lower().endswith(".png"):
+                    mime_type = "image/png"
+                elif (filename or "").lower().endswith(".webp"):
+                    mime_type = "image/webp"
+                else:
+                    mime_type = "image/jpeg"
+
             prompt = build_food_ai_prompt("")
 
             for model_name in models_to_try:
@@ -727,8 +734,7 @@ async def analyze_food(image: UploadFile = File(...)):
                             }
                         ],
                         "generationConfig": {
-                            "temperature": 0.1,
-                            "responseMimeType": "application/json"
+                            "temperature": 0.1
                         }
                     }
 

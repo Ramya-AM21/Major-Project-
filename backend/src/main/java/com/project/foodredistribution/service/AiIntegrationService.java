@@ -139,7 +139,8 @@ public class AiIntegrationService {
 
     public Map<String, Object> analyzeFoodImage(byte[] imageBytes, String filename) {
         try {
-            String url = aiServiceUrl + "/api/v1/ai/analyze-food";
+            String baseUrl = (aiServiceUrl != null && !aiServiceUrl.trim().isEmpty()) ? aiServiceUrl.replaceAll("/+$", "") : "http://localhost:8000";
+            String url = baseUrl + "/api/v1/ai/analyze-food";
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.setContentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA);
 
@@ -168,7 +169,7 @@ public class AiIntegrationService {
 
         // Dynamic Fallback: Derive food details from filename instead of static string
         String cleanName = (filename != null && !filename.isEmpty()) ? filename.replaceAll("(?i)\\.(jpg|jpeg|png|webp|gif)$", "").replaceAll("[^a-zA-Z]", " ").trim() : "";
-        String dynamicTitle = "Fresh Prepared Meal";
+        String dynamicTitle = "Fresh Prepared Surplus Meal";
         String dynamicCategory = "Vegetarian";
         
         if (!cleanName.isEmpty()) {
@@ -183,8 +184,10 @@ public class AiIntegrationService {
             else {
                 String[] words = cleanName.split("\\s+");
                 StringBuilder sb = new StringBuilder();
+                List<String> junkList = Arrays.asList("img", "photo", "pic", "image", "wp", "whatsapp", "signal", "media", "upload", "temp", "blob", "file", "download", "downloads", "doc", "document", "scan", "attachment", "screenshot", "capture");
                 for (String w : words) {
-                    if (w.length() > 2 && !w.equalsIgnoreCase("img") && !w.equalsIgnoreCase("photo") && !w.equalsIgnoreCase("pic")) {
+                    String wLower = w.toLowerCase().strip();
+                    if (wLower.length() > 2 && !junkList.contains(wLower)) {
                         sb.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1).toLowerCase()).append(" ");
                     }
                 }
