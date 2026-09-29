@@ -702,7 +702,7 @@ async def analyze_food(image: UploadFile = File(...)):
         gemini_key = os.getenv("GEMINI_API_KEY")
 
         if gemini_key:
-            models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-lite"]
+            models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-lite"]
             image_b64 = base64.b64encode(content).decode("utf-8")
             mime_type = image.content_type or "image/jpeg"
             prompt = build_food_ai_prompt("")

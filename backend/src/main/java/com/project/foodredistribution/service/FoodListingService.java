@@ -452,15 +452,15 @@ public class FoodListingService {
         log.info("aiDescription={}", aiDescription);
         log.info("=====================================");
 
-        // Apply Priority 1 (Manual) > Priority 2 (AI)
-        mergedFood.put("foodName", isNotEmpty(manualFoodName) ? manualFoodName : (aiSuccess && isNotEmpty(aiFoodName) ? aiFoodName : ""));
-        mergedFood.put("category", isNotEmpty(manualCategory) ? manualCategory : mappedCategory);
-        mergedFood.put("foodType", isNotEmpty(manualFoodType) ? manualFoodType : (aiSuccess && isNotEmpty(aiFoodType) ? aiFoodType : "Vegetarian"));
-        mergedFood.put("description", isNotEmpty(manualDescription) ? manualDescription : (aiSuccess && isNotEmpty(aiDescription) ? aiDescription : ""));
+        // Apply Priority: AI Extracted (when aiSuccess is true) > Manual Form State
+        mergedFood.put("foodName", (aiSuccess && isNotEmpty(aiFoodName)) ? aiFoodName : (isNotEmpty(manualFoodName) ? manualFoodName : ""));
+        mergedFood.put("category", (aiSuccess && isNotEmpty(mappedCategory)) ? mappedCategory : (isNotEmpty(manualCategory) ? manualCategory : "VEG"));
+        mergedFood.put("foodType", (aiSuccess && isNotEmpty(aiFoodType)) ? aiFoodType : (isNotEmpty(manualFoodType) ? manualFoodType : "Vegetarian"));
+        mergedFood.put("description", (aiSuccess && isNotEmpty(aiDescription)) ? aiDescription : (isNotEmpty(manualDescription) ? manualDescription : ""));
         
-        mergedFood.put("quantity", isNotEmpty(manualQuantity) ? manualQuantity : (aiSuccess && isNotEmpty(aiQuantity) ? aiQuantity : ""));
-        mergedFood.put("unit", isNotEmpty(manualUnit) ? manualUnit : (aiSuccess && isNotEmpty(aiUnit) ? aiUnit : "MEALS"));
-        mergedFood.put("allergens", isNotEmpty(manualAllergens) ? manualAllergens : (aiSuccess && isNotEmpty(aiAllergens) ? aiAllergens : ""));
+        mergedFood.put("quantity", (aiSuccess && isNotEmpty(aiQuantity)) ? aiQuantity : (isNotEmpty(manualQuantity) ? manualQuantity : ""));
+        mergedFood.put("unit", (aiSuccess && isNotEmpty(aiUnit)) ? aiUnit : (isNotEmpty(manualUnit) ? manualUnit : "MEALS"));
+        mergedFood.put("allergens", (aiSuccess && isNotEmpty(aiAllergens)) ? aiAllergens : (isNotEmpty(manualAllergens) ? manualAllergens : ""));
         mergedFood.put("safeConsumptionHours", isNotEmpty(manualSafeHours) ? manualSafeHours : "");
         mergedFood.put("estimatedServings", isNotEmpty(aiServings) ? aiServings : "");
 

@@ -313,20 +313,20 @@ export const FoodDetailPage: React.FC = () => {
                 <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border">
                   <span className="text-[9px] text-natural-muted font-bold block uppercase tracking-wider">Matched Volunteer</span>
                   <span className="font-bold text-natural-text mt-1 block">
-                    {task.volunteer ? task.volunteer.user.name : 'Rahul Sharma'}
+                    {task.volunteer ? task.volunteer.user.name : 'Unassigned (Awaiting Volunteer)'}
                   </span>
                   <span className="text-natural-muted block mt-0.5 font-normal">
-                    {task.volunteer ? task.volunteer.user.phoneNumber : '9876543210'}
+                    {task.volunteer ? (task.volunteer.user.phoneNumber || 'N/A') : 'No volunteer assigned yet'}
                   </span>
                 </div>
 
                 <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border">
                   <span className="text-[9px] text-natural-muted font-bold block uppercase tracking-wider">Drop Shelter Zone</span>
                   <span className="font-bold text-natural-text mt-1 block">
-                    {task.zone ? task.zone.name : 'Central Community Zone'}
+                    {task.zone ? task.zone.name : 'Pending Zone Assignment'}
                   </span>
                   <p className="text-[10px] text-natural-muted mt-0.5 leading-relaxed truncate font-normal">
-                    {task.zone ? task.zone.address : 'Cubbon Road Shelter'}
+                    {task.zone ? task.zone.address : 'Zone will be assigned upon matching'}
                   </p>
                 </div>
               </div>
