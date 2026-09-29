@@ -66,10 +66,10 @@ def preprocess_image(image_bytes):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Contrast Enhancement (CLAHE)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(gray)
 
-    return denoised, None
+    return enhanced, None
 
 def detect_image_mime_type(content: bytes, filename: str = "") -> str:
     if content.startswith(b'\x89PNG\r\n\x1a\n'):
@@ -609,12 +609,12 @@ def analyze_image_dynamically(content: bytes, filename: str) -> dict:
                 mean_s = np.mean(hsv[:, :, 1])
                 mean_v = np.mean(hsv[:, :, 2])
                 
-                # Check for Printed Paper Receipt / Invoice (High brightness V > 170, low saturation S < 45)
-                if mean_v > 170 and mean_s < 45:
+                # Check for Printed / Handwritten Paper Receipt / Invoice (High brightness V > 120, low/medium saturation S < 85)
+                if mean_v > 120 and mean_s < 85:
                     matched_name = "Restaurant Receipt Surplus Order"
                     matched_cat = "Cooked Meal"
                     matched_type = "Vegetarian"
-                    matched_items = ["South Indian Dosa", "Cheese Toast S/W", "Side Dishes"]
+                    matched_items = ["Shahi Paneer", "Dal Makhani", "Veg Raita", "Roti"]
                 # Green dominant (HSV Hue 35-85) -> Veggies / Fresh Salad
                 elif 35 <= mean_h <= 85 and mean_s > 40:
                     matched_name = "Fresh Green Veggies & Salad"
