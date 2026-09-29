@@ -69,10 +69,24 @@ def preprocess_image(image_bytes):
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(gray)
 
-    # Denoising using Bilateral Filter to preserve sharp text edges
-    denoised = cv2.bilateralFilter(enhanced, 9, 75, 75)
-
     return denoised, None
+
+def detect_image_mime_type(content: bytes, filename: str = "") -> str:
+    if content.startswith(b'\x89PNG\r\n\x1a\n'):
+        return "image/png"
+    elif content.startswith(b'\xff\xd8\xff'):
+        return "image/jpeg"
+    elif content.startswith(b'RIFF') and len(content) >= 12 and content[8:12] == b'WEBP':
+        return "image/webp"
+    elif content.startswith(b'GIF87a') or content.startswith(b'GIF89a'):
+        return "image/gif"
+    
+    fn = (filename or "").lower().strip()
+    if fn.endswith(".png"):
+        return "image/png"
+    elif fn.endswith(".webp"):
+        return "image/webp"
+    return "image/jpeg"
 
 def parse_ocr_text_to_food_details(raw_text):
     lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
@@ -703,15 +717,8 @@ async def analyze_food(image: UploadFile = File(...)):
 
         if gemini_key:
             models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-lite"]
-            mime_type = image.content_type or "image/jpeg"
-            if not mime_type.startswith("image/") or mime_type == "image/jpg":
-                if (filename or "").lower().endswith(".png"):
-                    mime_type = "image/png"
-                elif (filename or "").lower().endswith(".webp"):
-                    mime_type = "image/webp"
-                else:
-                    mime_type = "image/jpeg"
-
+            mime_type = detect_image_mime_type(content, filename)
+            image_b64 = base64.b64encode(content).decode("utf-8")
             prompt = build_food_ai_prompt("")
 
             for model_name in models_to_try:
