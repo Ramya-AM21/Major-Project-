@@ -2,8 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapView } from '../components/MapView';
 import { useAuth } from '../context/AuthContext';
-import { AlertCircle, ArrowLeft, Loader2, CheckCircle2, Camera, Upload, Trash2, Sparkles, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Loader2, CheckCircle2, Camera, Upload, Trash2, Sparkles, RefreshCw, Receipt, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
+
+export interface ExtractedFoodItem {
+  name: string;
+  quantity?: number | string | null;
+  unitPrice?: number | null;
+  totalPrice?: number | null;
+  foodCategory?: string;
+  confidence?: number;
+  needsReview?: boolean;
+}
 
 export const CreateFoodListing: React.FC = () => {
   const { user, providerProfile, fetchProviderProfile } = useAuth();
@@ -14,8 +24,12 @@ export const CreateFoodListing: React.FC = () => {
   const [entryMethod, setEntryMethod] = useState<'MANUAL' | 'AI_ASSISTED' | null>(null);
   const [step, setStep] = useState<number>(0); // 0: choice screen, 1: photo upload, 2: edit/review form
 
-  // OCR tracking states
-  const [detectedFoodItems, setDetectedFoodItems] = useState<{ name: string; quantity: string | null }[]>([]);
+  // OCR tracking & receipt audit states
+  const [detectedFoodItems, setDetectedFoodItems] = useState<ExtractedFoodItem[]>([]);
+  const [isReceipt, setIsReceipt] = useState<boolean>(false);
+  const [receiptDetails, setReceiptDetails] = useState<{ restaurantName?: string; receiptNumber?: string; dateTime?: string; currency?: string } | null>(null);
+  const [totals, setTotals] = useState<{ subtotal?: number | null; tax?: number | null; discount?: number | null; grandTotal?: number | null } | null>(null);
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [loadingStage, setLoadingStage] = useState<'UPLOADING' | 'EXTRACTING' | 'IDENTIFYING' | null>(null);
   const [ocrFailed, setOcrFailed] = useState<boolean | string>(false);
 
@@ -340,16 +354,34 @@ export const CreateFoodListing: React.FC = () => {
 
         setAiSource(data.source);
 
-        // Extract multiple food items — FastAPI food_items forwarded as extractedDetails.foodItems
+        // Capture receipt metadata and audit flags
+        const isRec = data.isReceipt ?? data.extractedDetails?.isReceipt ?? false;
+        setIsReceipt(isRec);
+
+        const recDet = data.receiptDetails ?? data.extractedDetails?.receiptDetails ?? null;
+        setReceiptDetails(recDet);
+
+        const tot = data.totals ?? data.extractedDetails?.totals ?? null;
+        setTotals(tot);
+
+        const warnList = data.warnings ?? [];
+        setAiWarnings(warnList);
+
+        // Extract multiple food items with full price & audit metadata
         if (data.extractedDetails && data.extractedDetails.foodItems && Array.isArray(data.extractedDetails.foodItems)) {
-          const items = data.extractedDetails.foodItems.map((item: any) => ({
+          const items: ExtractedFoodItem[] = data.extractedDetails.foodItems.map((item: any) => ({
             name: typeof item === 'string' ? item : (item.name || ''),
-            quantity: item.quantity ?? null
+            quantity: item.quantity ?? null,
+            unitPrice: item.unitPrice ?? null,
+            totalPrice: item.totalPrice ?? null,
+            foodCategory: item.foodCategory || 'Vegetarian',
+            confidence: item.confidence ?? 0.85,
+            needsReview: item.needsReview ?? false
           })).filter((item: any) => item.name);
           setDetectedFoodItems(items);
           console.log("Detected food items set:", items);
         } else if (f.foodName) {
-          setDetectedFoodItems([{ name: f.foodName, quantity: f.quantity ? String(f.quantity) : null }]);
+          setDetectedFoodItems([{ name: f.foodName, quantity: f.quantity ? String(f.quantity) : null, needsReview: false }]);
         }
 
         // Show confirmation screen
@@ -678,9 +710,9 @@ export const CreateFoodListing: React.FC = () => {
             )}
           </div>
 
-          <div className="space-y-3 text-left">
-            {/* Food Name */}
-            <div className="p-3 bg-brand-50/20 border border-brand-100 rounded-xl space-y-2 text-xs font-semibold">
+          <div className="space-y-4 text-left">
+            {/* Primary Food Overview */}
+            <div className="p-3.5 bg-brand-50/20 border border-brand-100 rounded-xl space-y-2 text-xs font-semibold">
               <div className="flex justify-between items-start gap-4">
                 <span className="text-natural-muted shrink-0">Food Name:</span>
                 <span className="font-bold text-natural-text text-right">{foodName || 'Not detected'}</span>
@@ -713,8 +745,126 @@ export const CreateFoodListing: React.FC = () => {
               )}
             </div>
 
-            {/* Food Items List */}
-            {detectedFoodItems.length > 0 && (
+            {/* Receipt / Invoice Detailed Breakdown */}
+            {(isReceipt || receiptDetails || detectedFoodItems.some(i => i.totalPrice || i.unitPrice)) && (
+              <div className="p-4 border border-brand-200 bg-brand-50/10 rounded-xl space-y-3">
+                <div className="flex items-center justify-between border-b border-brand-100 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-brand-650" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-natural-text">
+                      {isReceipt ? "Receipt Breakdown & Items Audit" : "Detected Food Items Breakdown"}
+                    </span>
+                  </div>
+                  {receiptDetails?.receiptNumber && receiptDetails.receiptNumber !== "unknown" && (
+                    <span className="text-[10px] font-mono bg-white border border-brand-200 px-2 py-0.5 rounded text-natural-muted">
+                      Inv #{receiptDetails.receiptNumber}
+                    </span>
+                  )}
+                </div>
+
+                {/* Metadata Header */}
+                {receiptDetails && (receiptDetails.restaurantName !== "unknown" || receiptDetails.dateTime !== "unknown") && (
+                  <div className="grid grid-cols-2 gap-2 text-[11px] bg-white p-2.5 rounded-lg border border-natural-border">
+                    {receiptDetails.restaurantName && receiptDetails.restaurantName !== "unknown" && (
+                      <div>
+                        <span className="text-natural-muted">Restaurant: </span>
+                        <span className="font-bold text-natural-text">{receiptDetails.restaurantName}</span>
+                      </div>
+                    )}
+                    {receiptDetails.dateTime && receiptDetails.dateTime !== "unknown" && (
+                      <div>
+                        <span className="text-natural-muted">Date/Time: </span>
+                        <span className="font-medium text-natural-text">{receiptDetails.dateTime}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Warnings & Audit Flags */}
+                {aiWarnings.length > 0 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      <span>Audit Flags & Discrepancies</span>
+                    </div>
+                    {aiWarnings.map((warn, wIdx) => (
+                      <p key={wIdx} className="text-[11px] text-amber-900 leading-snug pl-5">
+                        • {warn}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                {/* Itemized Table */}
+                {detectedFoodItems.length > 0 && (
+                  <div className="overflow-x-auto rounded-lg border border-natural-border bg-white">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-natural-surface border-b border-natural-border text-[10px] font-bold uppercase text-natural-muted">
+                        <tr>
+                          <th className="p-2">Item Name</th>
+                          <th className="p-2 text-center">Qty</th>
+                          <th className="p-2 text-right">Unit Price</th>
+                          <th className="p-2 text-right">Line Total</th>
+                          <th className="p-2 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-natural-border">
+                        {detectedFoodItems.map((item, idx) => (
+                          <tr key={idx} className={item.needsReview ? "bg-amber-50/50" : "hover:bg-natural-surface/50"}>
+                            <td className="p-2 font-bold text-natural-text">{item.name}</td>
+                            <td className="p-2 text-center font-medium">{item.quantity ?? "-"}</td>
+                            <td className="p-2 text-right text-natural-muted font-mono">
+                              {item.unitPrice ? `${receiptDetails?.currency || "₹"}${item.unitPrice.toFixed(2)}` : "-"}
+                            </td>
+                            <td className="p-2 text-right font-bold font-mono text-natural-text">
+                              {item.totalPrice ? `${receiptDetails?.currency || "₹"}${item.totalPrice.toFixed(2)}` : "-"}
+                            </td>
+                            <td className="p-2 text-center">
+                              {item.needsReview ? (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                                  <AlertTriangle className="w-2.5 h-2.5" /> Review
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full">
+                                  <CheckCircle2 className="w-2.5 h-2.5" /> OK
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Receipt Totals Summary */}
+                {totals && (totals.subtotal !== null || totals.grandTotal !== null) && (
+                  <div className="flex flex-wrap items-center justify-between bg-white p-2.5 rounded-lg border border-natural-border text-xs">
+                    {totals.subtotal !== null && totals.subtotal !== undefined && (
+                      <div>
+                        <span className="text-natural-muted">Subtotal: </span>
+                        <span className="font-bold font-mono text-natural-text">{receiptDetails?.currency || "₹"}{totals.subtotal.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {totals.tax !== null && totals.tax !== undefined && (
+                      <div>
+                        <span className="text-natural-muted">Tax: </span>
+                        <span className="font-mono text-natural-text">{receiptDetails?.currency || "₹"}{totals.tax.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {totals.grandTotal !== null && totals.grandTotal !== undefined && (
+                      <div className="border-l border-natural-border pl-3 font-black text-brand-700">
+                        <span>Grand Total: </span>
+                        <span className="font-mono">{receiptDetails?.currency || "₹"}{totals.grandTotal.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Food Items Pills Fallback */}
+            {!isReceipt && detectedFoodItems.length > 0 && !detectedFoodItems.some(i => i.totalPrice) && (
               <div className="p-3 border border-natural-border rounded-xl space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-natural-muted">

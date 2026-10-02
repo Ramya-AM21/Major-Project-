@@ -507,12 +507,34 @@ public class FoodListingService {
         
         result.put("ai", aiMeta);
         
-        // ---- CRITICAL FIX: Forward food_items from FastAPI as extractedDetails.foodItems ----
-        // FastAPI returns: food_items: [{ name: "Medu Wada", confidence: 0.98 }, ...]
+        // Forward top-level receipt audit metadata
+        if (aiSuccess && aiResult.get("isReceipt") != null) {
+            result.put("isReceipt", aiResult.get("isReceipt"));
+        }
+        if (aiSuccess && aiResult.get("receiptDetails") != null) {
+            result.put("receiptDetails", aiResult.get("receiptDetails"));
+        }
+        if (aiSuccess && aiResult.get("totals") != null) {
+            result.put("totals", aiResult.get("totals"));
+        }
+        if (aiResult != null && aiResult.get("warnings") != null) {
+            result.put("warnings", aiResult.get("warnings"));
+        }
+        
+        // ---- CRITICAL FIX: Forward food_items & metadata as extractedDetails ----
         if (aiSuccess && aiResult.get("food_items") instanceof java.util.List) {
             java.util.List<?> foodItemsList = (java.util.List<?>) aiResult.get("food_items");
             java.util.Map<String, Object> fDetails = new java.util.HashMap<>();
             fDetails.put("foodItems", foodItemsList);
+            if (aiResult.get("receiptDetails") != null) {
+                fDetails.put("receiptDetails", aiResult.get("receiptDetails"));
+            }
+            if (aiResult.get("totals") != null) {
+                fDetails.put("totals", aiResult.get("totals"));
+            }
+            if (aiResult.get("isReceipt") != null) {
+                fDetails.put("isReceipt", aiResult.get("isReceipt"));
+            }
             result.put("extractedDetails", fDetails);
         } else if (aiSuccess && aiResult.get("extractedDetails") != null) {
             result.put("extractedDetails", aiResult.get("extractedDetails"));

@@ -91,7 +91,6 @@ def detect_image_mime_type(content: bytes, filename: str = "") -> str:
 def parse_ocr_text_to_food_details(raw_text):
     lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
     
-    # Metadata headers/footers to skip
     metadata_keywords = [
         "total", "tax", "subtotal", "gst", "cgst", "sgst", "invoice", "bill", "date", "time",
         "tel", "phone", "cashier", "receipt", "payment", "change", "cash", "card", "visa",
@@ -101,7 +100,6 @@ def parse_ocr_text_to_food_details(raw_text):
         "address", "street", "road", "city", "state", "pin", "code", "website", "email"
     ]
     
-    # Keywords indicating a food item is likely present
     food_keywords = [
         "rice", "biryani", "roti", "chapati", "curry", "dal", "sambar", "paneer", "chicken",
         "veg", "salad", "soup", "pizza", "burger", "pasta", "thali", "meal", "naan", "sabji",
@@ -119,7 +117,6 @@ def parse_ocr_text_to_food_details(raw_text):
         line_clean = line.strip()
         line_lower = line_clean.lower()
         
-        # Skip lines that are clearly metadata
         if any(keyword in line_lower for keyword in metadata_keywords):
             continue
             
@@ -128,22 +125,22 @@ def parse_ocr_text_to_food_details(raw_text):
             continue
             
         item_qty = None
+        prices = []
         item_name_tokens = []
         
         for token in tokens:
-            # Check if token is numerical quantity or price
-            if token.replace('.', '', 1).isdigit():
-                val = float(token)
-                if val.is_integer() and 1 <= val <= 100:
-                    if item_qty is None:
-                        item_qty = int(val)
+            clean_token = token.replace('$', '').replace('₹', '').replace(',', '').strip()
+            if clean_token.replace('.', '', 1).isdigit():
+                val = float(clean_token)
+                if val.is_integer() and 1 <= val <= 100 and item_qty is None and len(item_name_tokens) == 0:
+                    item_qty = int(val)
+                else:
+                    prices.append(val)
             else:
                 item_name_tokens.append(token)
                 
         item_name = " ".join(item_name_tokens).strip()
-        # Clean special chars
         item_name = re.sub(r'[^a-zA-Z\s\-\&]', '', item_name).strip()
-        # Clean leading/trailing noise
         item_name = re.sub(r'^[xX\@\-\s]+', '', item_name).strip()
         item_name = re.sub(r'[xX\@\-\s]+$', '', item_name).strip()
         item_name = re.sub(r'\s+', ' ', item_name).strip()
@@ -151,20 +148,31 @@ def parse_ocr_text_to_food_details(raw_text):
         if len(item_name) >= 3 and not any(kw in item_name.lower() for kw in metadata_keywords):
             if not any(f["name"].lower() == item_name.lower() for f in food_items):
                 is_food = any(kw in item_name.lower() for kw in food_keywords)
-                # If it's a food keyword, or has a quantity, or is multi-word text, treat as candidate food
                 if is_food or item_qty is not None or len(item_name.split()) >= 2:
+                    unit_p = prices[0] if len(prices) >= 1 else None
+                    tot_p = prices[1] if len(prices) >= 2 else (unit_p if unit_p else None)
+                    if unit_p and tot_p and item_qty and unit_p * item_qty == tot_p:
+                        needs_rev = False
+                    elif unit_p and tot_p and item_qty:
+                        needs_rev = True
+                    else:
+                        needs_rev = False
+
                     food_items.append({
                         "name": item_name,
-                        "quantity": item_qty
+                        "quantity": item_qty,
+                        "unitPrice": unit_p,
+                        "totalPrice": tot_p,
+                        "foodCategory": "Vegetarian" if not any(nk in item_name.lower() for nk in ["chicken", "mutton", "fish", "meat"]) else "Non-Vegetarian",
+                        "confidence": 0.70,
+                        "needsReview": needs_rev
                     })
 
-    # Extract suggested primary food name
     suggested_food_name = ""
     if food_items:
         names = [f["name"] for f in food_items if f.get("name")]
         suggested_food_name = ", ".join(names[:4])
         
-    # Extract total quantity from text
     suggested_quantity = None
     qty_total_match = re.search(r'(?:total\s+)?(?:qty|quantity|meals|plates|pcs|pieces)\s*:?\s*([\d\.]+)', raw_text, re.IGNORECASE)
     if qty_total_match:
@@ -173,13 +181,11 @@ def parse_ocr_text_to_food_details(raw_text):
         except ValueError:
             pass
             
-    # Fallback to sum of items if total is not found
     if not suggested_quantity and food_items:
         item_quantities = [f["quantity"] for f in food_items if f["quantity"] is not None]
         if item_quantities:
             suggested_quantity = float(sum(item_quantities))
 
-    # Classify category
     suggested_category = "Vegetarian"
     non_veg_keywords = ["chicken", "mutton", "fish", "meat", "non-veg", "beef", "pork", "prawn", "crab"]
     egg_keywords = ["egg", "anda"]
@@ -218,21 +224,19 @@ def health_check():
     return {"status": "UP", "service": "AnnaSetu AI Service"}
 
 # --- INITIALIZE DEMAND PREDICTION MODEL (RANDOM FOREST) ---
-# Generate mock historical training data
 np.random.seed(42)
-days = [i % 7 for i in range(500)] # 0: Monday, 6: Sunday
+days = [i % 7 for i in range(500)]
 hours = [random.choice([8, 12, 17, 20]) for _ in range(500)]
 capacities = [random.choice([100, 120, 150, 200]) for _ in range(500)]
 previous_demand = [capacity * random.uniform(0.3, 0.9) for capacity in capacities]
-seasonality = [1.2 if d in [5, 6] else 0.95 for d in days] # weekends have higher demand
+seasonality = [1.2 if d in [5, 6] else 0.95 for d in days]
 
 meals_served = []
 for d, h, c, prev, seas in zip(days, hours, capacities, previous_demand, seasonality):
-    # Base calculation + noise
     base = prev * seas
-    if h == 20: # night slot has more demand
+    if h == 20:
         base *= 1.15
-    elif h == 8: # breakfast has lower demand
+    elif h == 8:
         base *= 0.70
     served = min(c, max(10, base + np.random.normal(0, 15)))
     meals_served.append(round(served))
@@ -253,19 +257,18 @@ demand_model.fit(X_demand, y_demand)
 print("Random Forest Demand Model trained successfully.")
 
 # --- INITIALIZE ANOMALY DETECTION MODEL (ISOLATION FOREST) ---
-# Features for anomaly detection: [travel_speed(km/h), repeated_photo(0/1), repeated_gps(0/1)]
 normal_deliveries = []
 for _ in range(200):
-    speed = np.random.normal(25, 8) # normal city transit speed
+    speed = np.random.normal(25, 8)
     photo = 0 if random.random() > 0.05 else 1
     gps = 0 if random.random() > 0.05 else 1
     normal_deliveries.append([speed, photo, gps])
 
 anomalous_deliveries = [
-    [150.0, 0, 0], # impossible transit speed (150 km/h in city)
-    [18.0, 1, 1],  # reuse of photo and GPS tracker fingerprints
-    [210.0, 1, 0], # extreme speed & duplicate image fingerprint
-    [3.0, 1, 1]    # stalled speed & duplicated parameters
+    [150.0, 0, 0],
+    [18.0, 1, 1],
+    [210.0, 1, 0],
+    [3.0, 1, 1]
 ]
 
 X_anomaly = np.array(normal_deliveries + anomalous_deliveries)
@@ -285,32 +288,26 @@ class AnomalyRequest(BaseModel):
 # --- REST ENDPOINTS ---
 @app.get("/api/v1/ai/predict-demand")
 def predict_demand(zoneId: str = Query(..., description="UUID of the receiving community zone")):
-    # Extract current parameters
     now = datetime.datetime.now()
     day_of_week = now.weekday()
     hour = now.hour
     
-    # We assign default capacity based on simulated zone metadata
     capacity = 150
     if "north" in zoneId.lower() or "malleswaram" in zoneId.lower():
         capacity = 120
     elif "transit" in zoneId.lower():
         capacity = 200
         
-    prev_demand = capacity * 0.72 # mock base
+    prev_demand = capacity * 0.72
     
-    # Predict
     input_data = pd.DataFrame([[day_of_week, hour, capacity, prev_demand]], 
                               columns=['day_of_week', 'time_slot_hour', 'capacity', 'previous_demand'])
     predicted_meals = float(demand_model.predict(input_data)[0])
     
-    # Calculate confidence interval metric based on Forest trees variance
     predictions = [tree.predict(input_data)[0] for tree in demand_model.estimators_]
     variance = np.var(predictions)
-    # Scale variance to support confidence display score (0.75 - 0.95 range)
     confidence = max(0.70, min(0.96, 0.95 - (variance / 800.0)))
     
-    # Priority classification
     fill_ratio = predicted_meals / capacity
     if fill_ratio > 0.80:
         priority = "HIGH"
@@ -334,9 +331,8 @@ def detect_anomaly(req: AnomalyRequest):
     
     features = np.array([[req.travelSpeed, photo_val, gps_val]])
     
-    # Isolation forest predicts -1 for anomalies, 1 for normal
     prediction = anomaly_detector.predict(features)[0]
-    score = float(anomaly_detector.decision_function(features)[0]) # lower scores mean more anomalous
+    score = float(anomaly_detector.decision_function(features)[0])
     
     if prediction == -1:
         if req.travelSpeed > 100.0:
@@ -370,13 +366,11 @@ async def validate_delivery_proof(
     latitude: float = Form(...),
     longitude: float = Form(...)
 ):
-    # inspect size
     content = await image.read()
     size = len(content)
     
     filename = image.filename.lower()
     
-    # Check duplicate flags or cheat markers in filename
     if "fake" in filename or "cheat" in filename or size < 500:
         return {
             "valid": False,
@@ -394,45 +388,76 @@ async def validate_delivery_proof(
 
 def build_food_ai_prompt(ocr_text: str = ""):
     return f"""
-You are the food-analysis AI for a food redistribution platform.
+You are the food-analysis AI for a food redistribution platform (FoodBridge).
 
 The uploaded image will be a RECEIPT/INVOICE containing food items, OR a direct PHOTO of cooked food, packaged food, or produce.
-Analyze the image and extract all visible food details.
+Analyze the image with absolute precision and extract all visible details.
 
 OCR TEXT DETECTED (IF ANY):
 {ocr_text if ocr_text.strip() else "(No pre-extracted text)"}
 
-Your job is to identify the food in the image and return ONLY valid JSON.
+Your job is to identify all food details in the image and return ONLY valid JSON.
 
-Return exactly this structure:
+Return exactly this JSON structure:
 
 {{
-  "food_name": "main food name (e.g. Veg Biryani, Chicken Curry, Packaged Meal)",
+  "is_receipt": true,
+  "receipt_details": {{
+    "restaurant_name": "Restaurant name or unknown",
+    "receipt_number": "Invoice/Receipt # or unknown",
+    "date_time": "Date/Time string or unknown",
+    "currency": "INR"
+  }},
+  "food_name": "Main food summary (e.g. Veg Biryani, Paneer Butter Masala & Naan)",
   "food_items": [
     {{
-      "name": "food item name",
-      "confidence": 0.95
+      "name": "Exact food item name",
+      "quantity": 2,
+      "unit_price": 250.0,
+      "total_price": 500.0,
+      "food_category": "Vegetarian",
+      "confidence": 0.95,
+      "needs_review": false
     }}
   ],
+  "totals": {{
+    "subtotal": 500.0,
+    "tax": 25.0,
+    "discount": 0.0,
+    "grand_total": 525.0
+  }},
   "food_category": "Cooked Meal",
   "food_type": "Vegetarian",
-  "description": "short description of visible food",
-  "estimated_quantity": null,
-  "estimated_servings": null,
-  "visible_packaging": null,
+  "description": "Short description of the food or receipt contents",
+  "estimated_quantity": 2.0,
+  "estimated_servings": 2,
+  "visible_packaging": "Containers",
   "visible_labels": [],
   "possible_allergens": [],
   "confidence": 0.90,
   "warnings": []
 }}
 
-IMPORTANT RULES:
-1. If the image is a receipt/invoice, identify all food items listed in the receipt.
-2. If the image is a photo of food, identify the primary dishes/items in the photo.
-3. food_type MUST be one of: "Vegetarian", "Non-Vegetarian", "Egg", "Unknown".
-4. food_category SHOULD be one of: "Cooked Meal", "Rice Dish", "Curry", "Bread", "Bakery", "Fruit", "Vegetables", "Packaged Food", "Beverage", "Dessert", "Other".
-5. confidence must be between 0.0 and 1.0.
-6. Return JSON only. No markdown fences. No explanation.
+CRITICAL INSTRUCTIONS:
+1. Determine if the image is a RECEIPT / INVOICE or a DIRECT FOOD PHOTO. Set "is_receipt" to true or false.
+2. If it is a RECEIPT / INVOICE:
+   - Extract "receipt_details" (restaurant_name, receipt_number, date_time, currency). If not clearly visible, set value to "unknown".
+   - Extract EVERY single food line item listed on the receipt. NEVER drop, ignore, or truncate any item lines!
+   - For each item, extract:
+     * "name": exact item name
+     * "quantity": numeric quantity (e.g. 2) or null if unknown
+     * "unit_price": numeric unit price (e.g. 250.0) or null
+     * "total_price": numeric line total (e.g. 500.0) or null
+     * "food_category": "Vegetarian", "Non-Vegetarian", "Egg", or "Unknown"
+     * "confidence": float between 0.0 and 1.0
+     * "needs_review": boolean (set true if quantity, price, or item name is blurry/unclear)
+   - Extract "totals" (subtotal, tax, discount, grand_total). Use numbers or null if not present.
+3. If it is a DIRECT FOOD PHOTO:
+   - Set "is_receipt": false.
+   - List all visible food dishes in "food_items".
+4. DO NOT fabricate or invent numbers. If a price or quantity is missing from the receipt, use null.
+5. "food_type" MUST be one of: "Vegetarian", "Non-Vegetarian", "Egg", "Unknown".
+6. Return JSON only. No markdown formatting fences. No explanation text.
 """
 
 
@@ -442,65 +467,153 @@ def normalize_ai_food_response(ai_data, source):
     if not isinstance(ai_data, dict):
         ai_data = {}
 
-    food_items = ai_data.get("food_items", [])
+    is_receipt = bool(ai_data.get("is_receipt", False))
 
+    receipt_details_raw = ai_data.get("receipt_details", {})
+    if not isinstance(receipt_details_raw, dict):
+        receipt_details_raw = {}
+
+    receipt_details = {
+        "restaurantName": str(receipt_details_raw.get("restaurant_name") or "unknown").strip(),
+        "receiptNumber": str(receipt_details_raw.get("receipt_number") or "unknown").strip(),
+        "dateTime": str(receipt_details_raw.get("date_time") or "unknown").strip(),
+        "currency": str(receipt_details_raw.get("currency") or "INR").strip()
+    }
+
+    totals_raw = ai_data.get("totals", {})
+    if not isinstance(totals_raw, dict):
+        totals_raw = {}
+
+    totals = {
+        "subtotal": float(totals_raw.get("subtotal")) if totals_raw.get("subtotal") is not None else None,
+        "tax": float(totals_raw.get("tax")) if totals_raw.get("tax") is not None else None,
+        "discount": float(totals_raw.get("discount")) if totals_raw.get("discount") is not None else None,
+        "grandTotal": float(totals_raw.get("grand_total")) if totals_raw.get("grand_total") is not None else None,
+    }
+
+    warnings = list(ai_data.get("warnings", []))
+
+    food_items = ai_data.get("food_items", [])
     if not isinstance(food_items, list):
         food_items = []
 
     normalized_items = []
+    item_line_totals_sum = 0.0
 
     for item in food_items:
         if isinstance(item, dict):
             name = str(item.get("name", "")).strip()
-
             if not name:
                 continue
 
             try:
-                confidence = float(item.get("confidence", 0.0))
+                confidence = float(item.get("confidence", 0.85))
             except (TypeError, ValueError):
-                confidence = 0.0
+                confidence = 0.85
+
+            qty = None
+            if item.get("quantity") is not None:
+                try:
+                    qty = float(item.get("quantity"))
+                except (TypeError, ValueError):
+                    qty = None
+
+            unit_price = None
+            if item.get("unit_price") is not None:
+                try:
+                    unit_price = float(item.get("unit_price"))
+                except (TypeError, ValueError):
+                    unit_price = None
+
+            total_price = None
+            if item.get("total_price") is not None:
+                try:
+                    total_price = float(item.get("total_price"))
+                except (TypeError, ValueError):
+                    total_price = None
+
+            # Auto-calculate missing line total or quantity if unit price is available
+            if total_price is None and qty is not None and unit_price is not None:
+                total_price = round(qty * unit_price, 2)
+            elif qty is None and total_price is not None and unit_price is not None and unit_price > 0:
+                qty = round(total_price / unit_price, 2)
+
+            needs_review = bool(item.get("needs_review", False))
+
+            # Arithmetic verification: quantity * unit_price == total_price
+            if qty is not None and unit_price is not None and total_price is not None:
+                calc_total = qty * unit_price
+                if abs(calc_total - total_price) > 1.0:
+                    needs_review = True
+                    warn_msg = f"Arithmetic mismatch for '{name}': Qty {qty} x Price {unit_price} = {calc_total:.2f}, but line total states {total_price:.2f}."
+                    if warn_msg not in warnings:
+                        warnings.append(warn_msg)
+
+            if total_price is not None:
+                item_line_totals_sum += total_price
+
+            cat = str(item.get("food_category") or "Vegetarian").strip()
 
             normalized_items.append({
                 "name": name,
-                "confidence": round(max(0.0, min(1.0, confidence)), 2)
+                "quantity": qty,
+                "unitPrice": unit_price,
+                "totalPrice": total_price,
+                "foodCategory": cat,
+                "confidence": round(max(0.0, min(1.0, confidence)), 2),
+                "needsReview": needs_review
             })
 
+    # Subtotal verification
+    if totals["subtotal"] is not None and item_line_totals_sum > 0:
+        if abs(totals["subtotal"] - item_line_totals_sum) > 1.0:
+            warn_msg = f"Subtotal mismatch: Sum of items ({item_line_totals_sum:.2f}) does not match receipt subtotal ({totals['subtotal']:.2f})."
+            if warn_msg not in warnings:
+                warnings.append(warn_msg)
+
+    # Grand total verification
+    if totals["grandTotal"] is not None and totals["subtotal"] is not None:
+        calc_grand = totals["subtotal"] + (totals["tax"] or 0.0) - (totals["discount"] or 0.0)
+        if abs(totals["grandTotal"] - calc_grand) > 1.0:
+            warn_msg = f"Grand total mismatch: Subtotal ({totals['subtotal']}) + Tax ({totals['tax'] or 0}) - Discount ({totals['discount'] or 0}) = {calc_grand:.2f}, but receipt grand total states {totals['grandTotal']}."
+            if warn_msg not in warnings:
+                warnings.append(warn_msg)
+
     food_name = str(ai_data.get("food_name") or "").strip()
-
     if not food_name and normalized_items:
-        food_name = normalized_items[0]["name"]
-
+        names = [f["name"] for f in normalized_items]
+        food_name = ", ".join(names[:3])
     if not food_name:
         food_name = "Donated Prepared Meal"
 
-    food_type = str(
-        ai_data.get("food_type") or "Vegetarian"
-    ).strip()
-
+    food_type = str(ai_data.get("food_type") or "Vegetarian").strip()
     if food_type not in ["Vegetarian", "Non-Vegetarian", "Egg", "Unknown"]:
         food_type = "Vegetarian"
 
     try:
-        confidence = float(ai_data.get("confidence", 0.0))
+        confidence = float(ai_data.get("confidence", 0.90))
     except (TypeError, ValueError):
-        confidence = 0.80
+        confidence = 0.90
 
     if confidence <= 0.0:
-        confidence = 0.80
-
+        confidence = 0.90
     confidence = round(max(0.0, min(1.0, confidence)), 2)
 
+    total_extracted_qty = ai_data.get("estimated_quantity")
+    if total_extracted_qty is None and normalized_items:
+        valid_qtys = [f["quantity"] for f in normalized_items if f["quantity"] is not None]
+        if valid_qtys:
+            total_extracted_qty = sum(valid_qtys)
+    if total_extracted_qty is None:
+        total_extracted_qty = 10.0
+
     extracted_details = {
-        "foodItems": [
-            {
-                "name": item["name"],
-                "quantity": None
-            }
-            for item in normalized_items
-        ],
+        "isReceipt": is_receipt,
+        "receiptDetails": receipt_details,
+        "totals": totals,
+        "foodItems": normalized_items,
         "suggestedFoodName": food_name,
-        "suggestedQuantity": ai_data.get("estimated_quantity") or 10.0,
+        "suggestedQuantity": float(total_extracted_qty),
         "suggestedCategory": food_type
     }
 
@@ -508,46 +621,24 @@ def normalize_ai_food_response(ai_data, source):
         "success": True,
         "status": "SUCCESS",
         "source": source,
-
         "rawText": ai_data.get("description", ""),
         "ocrStatus": "SUCCESS",
-
+        "isReceipt": is_receipt,
+        "receiptDetails": receipt_details,
+        "totals": totals,
         "extractedDetails": extracted_details,
-
-        # Spring Boot compatibility
         "food_name": food_name,
-        "food_items": normalized_items if normalized_items else [{"name": food_name, "confidence": confidence}],
-        "food_category": ai_data.get(
-            "food_category",
-            "Cooked Meal"
-        ),
+        "food_items": normalized_items,
+        "food_category": ai_data.get("food_category", "Cooked Meal"),
         "food_type": food_type,
-        "description": ai_data.get(
-            "description",
-            f"Cooked {food_name} ready for redistribution."
-        ),
-        "estimated_quantity": ai_data.get(
-            "estimated_quantity"
-        ) or 10.0,
-        "estimated_servings": ai_data.get(
-            "estimated_servings"
-        ) or 10,
-        "visible_packaging": ai_data.get(
-            "visible_packaging"
-        ),
-        "visible_labels": ai_data.get(
-            "visible_labels",
-            []
-        ),
-        "possible_allergens": ai_data.get(
-            "possible_allergens",
-            []
-        ),
+        "description": ai_data.get("description", f"Cooked {food_name} ready for redistribution."),
+        "estimated_quantity": float(total_extracted_qty),
+        "estimated_servings": ai_data.get("estimated_servings") or int(total_extracted_qty),
+        "visible_packaging": ai_data.get("visible_packaging"),
+        "visible_labels": ai_data.get("visible_labels", []),
+        "possible_allergens": ai_data.get("possible_allergens", []),
         "confidence": confidence,
-        "warnings": ai_data.get(
-            "warnings",
-            []
-        )
+        "warnings": warnings
     }
 
 
