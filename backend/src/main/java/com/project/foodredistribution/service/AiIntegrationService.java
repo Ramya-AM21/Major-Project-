@@ -168,65 +168,14 @@ public class AiIntegrationService {
             log.warn("FastAPI food analysis service unavailable: {}.", ex.getMessage());
         }
 
-        // Dynamic Fallback: Derive food details from filename instead of static string
-        String cleanName = (filename != null && !filename.isEmpty()) ? filename.replaceAll("(?i)\\.(jpg|jpeg|png|webp|gif)$", "").replaceAll("[^a-zA-Z]", " ").trim() : "";
-        String dynamicTitle = "Fresh Prepared Surplus Meal";
-        String dynamicCategory = "Vegetarian";
-        
-        if (!cleanName.isEmpty()) {
-            String lower = cleanName.toLowerCase();
-            if (lower.contains("chicken")) { dynamicTitle = "Chicken Special Meal"; dynamicCategory = "NON_VEG"; }
-            else if (lower.contains("biryani")) { dynamicTitle = "Special Biryani Portion"; dynamicCategory = lower.contains("veg") ? "VEG" : "NON_VEG"; }
-            else if (lower.contains("paneer")) { dynamicTitle = "Paneer Dish & Rotis"; dynamicCategory = "VEG"; }
-            else if (lower.contains("dosa")) { dynamicTitle = "Crispy Masala Dosa Portion"; dynamicCategory = "VEG"; }
-            else if (lower.contains("pizza")) { dynamicTitle = "Loaded Cheese Pizza"; dynamicCategory = "VEG"; }
-            else if (lower.contains("fruit") || lower.contains("apple")) { dynamicTitle = "Fresh Fruit Basket"; dynamicCategory = "VEG"; }
-            else if (lower.contains("salad")) { dynamicTitle = "Fresh Green Salad Bowl"; dynamicCategory = "VEG"; }
-            else {
-                String[] words = cleanName.split("\\s+");
-                StringBuilder sb = new StringBuilder();
-                List<String> junkList = Arrays.asList("img", "photo", "pic", "image", "wp", "whatsapp", "signal", "media", "upload", "temp", "blob", "file", "download", "downloads", "doc", "document", "scan", "attachment", "screenshot", "capture");
-                for (String w : words) {
-                    String wLower = w.toLowerCase().strip();
-                    if (wLower.length() > 2 && !junkList.contains(wLower)) {
-                        sb.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1).toLowerCase()).append(" ");
-                    }
-                }
-                if (sb.length() > 0) dynamicTitle = sb.toString().trim() + " Portion";
-            }
-        }
-
-        Map<String, Object> fallbackResult = new HashMap<>();
-        fallbackResult.put("success", true);
-        fallbackResult.put("status", "SUCCESS");
-        fallbackResult.put("source", "System Dynamic Preprocessor");
-        fallbackResult.put("foodName", dynamicTitle);
-        fallbackResult.put("food_name", dynamicTitle);
-        fallbackResult.put("food_category", dynamicCategory);
-        fallbackResult.put("food_type", "NON_VEG".equals(dynamicCategory) ? "Non-Vegetarian" : "Vegetarian");
-        fallbackResult.put("category", dynamicCategory);
-        fallbackResult.put("description", "Fresh " + dynamicTitle + " prepared for redistribution.");
-        fallbackResult.put("estimated_quantity", 10.0);
-        fallbackResult.put("unit", "MEALS");
-        fallbackResult.put("confidence", 0.80);
-
-        Map<String, Object> extractedDetails = new HashMap<>();
-        extractedDetails.put("suggestedFoodName", dynamicTitle);
-        extractedDetails.put("suggestedQuantity", 10.0);
-        extractedDetails.put("suggestedCategory", dynamicCategory);
-        extractedDetails.put("suggestedUnit", "MEALS");
-        extractedDetails.put("suggestedAllergens", "");
-
-        List<Map<String, Object>> items = new java.util.ArrayList<>();
-        Map<String, Object> item1 = new HashMap<>();
-        item1.put("name", dynamicTitle);
-        item1.put("quantity", "1 portion");
-        items.add(item1);
-
-        extractedDetails.put("foodItems", items);
-        fallbackResult.put("extractedDetails", extractedDetails);
-
-        return fallbackResult;
+        Map<String, Object> offlineResult = new HashMap<>();
+        offlineResult.put("success", false);
+        offlineResult.put("status", "SERVICE_UNAVAILABLE");
+        offlineResult.put("source", "System Preprocessor (AI Service Offline)");
+        offlineResult.put("aiServiceOffline", true);
+        offlineResult.put("message", "AI Vision service is offline or unreachable on port 8000. Please start the AI service (python app/main.py) or enter food details manually.");
+        offlineResult.put("confidence", 0.0);
+        return offlineResult;
     }
 
     public Map<String, Object> detectFraud(

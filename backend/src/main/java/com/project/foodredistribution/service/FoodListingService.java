@@ -507,7 +507,13 @@ public class FoodListingService {
         
         result.put("ai", aiMeta);
         
-        // Forward top-level receipt audit metadata
+        // Forward top-level receipt audit metadata & offline flags
+        if (aiResult != null && aiResult.get("aiServiceOffline") != null) {
+            result.put("aiServiceOffline", aiResult.get("aiServiceOffline"));
+        }
+        if (aiResult != null && aiResult.get("message") != null) {
+            result.put("message", aiResult.get("message"));
+        }
         if (aiSuccess && aiResult.get("isReceipt") != null) {
             result.put("isReceipt", aiResult.get("isReceipt"));
         }

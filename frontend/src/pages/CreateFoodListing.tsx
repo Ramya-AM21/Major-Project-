@@ -345,13 +345,14 @@ export const CreateFoodListing: React.FC = () => {
         }
         setAiDetected(true);
         
-        if (data.success === false) {
-            setAiError("We couldn't automatically extract all details. You can still enter the food information manually.");
-        } else {
-            setAiError(null);
+        if (data.aiServiceOffline || data.success === false) {
+          const offlineMsg = data.message || "AI Vision Service is currently offline or unreachable on port 8000. Please start the AI service (python app/main.py in ai-service folder) or enter details manually.";
+          setOcrFailed(offlineMsg);
+          setAiError(offlineMsg);
+          return;
         }
 
-
+        setAiError(null);
         setAiSource(data.source);
 
         // Capture receipt metadata and audit flags
