@@ -107,7 +107,16 @@ public class DeliveryTaskService {
         // Return existing task if one already exists for this food listing
         java.util.Optional<DeliveryTask> existing = deliveryTaskRepository.findByFoodListingId(foodListingId);
         if (existing.isPresent()) {
-            return existing.get();
+            DeliveryTask existingTask = existing.get();
+            FoodListing fl = existingTask.getFoodListing();
+            if (fl != null && ("AVAILABLE".equals(fl.getStatus()) || "SCHEDULED".equals(fl.getStatus())) || 
+                "CREATED".equals(existingTask.getStatus()) || "PROPOSED".equals(existingTask.getStatus())) {
+                if (existingTask.getVolunteer() != null) {
+                    existingTask.setVolunteer(null);
+                    existingTask = deliveryTaskRepository.save(existingTask);
+                }
+            }
+            return existingTask;
         }
 
         FoodListing foodListing = foodListingRepository.findById(foodListingId)

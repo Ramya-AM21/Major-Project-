@@ -62,6 +62,12 @@ def preprocess_image(image_bytes):
     if img is None:
         return None, "Invalid image format"
 
+    # Upscale small images for sharper text OCR
+    h, w = img.shape[:2]
+    if max(h, w) < 1000:
+        scale = 1000.0 / float(max(h, w))
+        img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
+
     # Grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -94,29 +100,24 @@ def parse_ocr_text_to_food_details(raw_text):
     metadata_keywords = [
         "total", "tax", "subtotal", "gst", "cgst", "sgst", "invoice", "bill", "date", "time",
         "tel", "phone", "cashier", "receipt", "payment", "change", "cash", "card", "visa",
-        "mastercard", "table", "waiter", "guest", "pax", "order", "no.", "sr.", "sl.", "qty",
+        "mastercard", "table", "waiter", "guest", "pax", "order", "no.", "sr.", "sl.",
         "amount", "price", "rate", "disc", "discount", "net amt", "round off", "balance",
         "welcome", "thank you", "visit again", "merchant", "terminal", "auth", "signature",
-        "address", "street", "road", "city", "state", "pin", "code", "website", "email"
+        "address", "street", "road", "city", "state", "pin", "code", "website", "email",
+        "fssai", "tin", "stax", "vat", "service charge", "swachh", "bharat", "cess",
+        "restaurant", "cafe", "kitchen", "dhaba", "bistro", "express", "diner", "hotel", "pvt", "ltd"
     ]
     
-    food_keywords = [
-        "rice", "biryani", "roti", "chapati", "curry", "dal", "sambar", "paneer", "chicken",
-        "veg", "salad", "soup", "pizza", "burger", "pasta", "thali", "meal", "naan", "sabji",
-        "sabzi", "gravy", "fry", "fish", "meat", "mutton", "egg", "noodle", "chole", "bhature",
-        "parotta", "paratha", "dosa", "idli", "vada", "upma", "pulao", "khichdi", "kofta",
-        "korma", "raita", "dessert", "sweet", "juice", "beverage", "drink", "coffee", "tea",
-        "water", "sandwich", "wrap", "roll", "taco", "burrito", "fries", "nuggets", "wing",
-        "kebab", "tikka", "tandoori", "manchurian", "momos", "samosa", "pakoda", "bhaji",
-        "paneer", "butter", "cheese", "bread", "milk", "curd", "yogurt"
-    ]
-
+    non_veg_keywords = ["chicken", "mutton", "fish", "meat", "non-veg", "non veg", "beef", "pork", "prawn", "crab", "lamb", "kabab", "kebab", "tikka", "tandoori"]
+    egg_keywords = ["egg", "anda", "omelette", "scrambled"]
+    
     food_items = []
     
     for line in lines:
         line_clean = line.strip()
         line_lower = line_clean.lower()
         
+        # Skip header/footer metadata lines
         if any(keyword in line_lower for keyword in metadata_keywords):
             continue
             
@@ -130,9 +131,18 @@ def parse_ocr_text_to_food_details(raw_text):
         
         for token in tokens:
             clean_token = token.replace('$', '').replace('₹', '').replace(',', '').strip()
+            
+            # Check for quantity markers like x2, 2x, @2
+            qty_match = re.match(r'^[xX\@]?(\d+)[xX]?$', clean_token)
+            if qty_match and item_qty is None and int(qty_match.group(1)) <= 100:
+                val = int(qty_match.group(1))
+                if 1 <= val <= 100:
+                    item_qty = val
+                    continue
+
             if clean_token.replace('.', '', 1).isdigit():
                 val = float(clean_token)
-                if val.is_integer() and 1 <= val <= 100 and item_qty is None and len(item_name_tokens) == 0:
+                if val.is_integer() and 1 <= val <= 50 and item_qty is None and (len(item_name_tokens) == 0 or len(prices) > 0):
                     item_qty = int(val)
                 else:
                     prices.append(val)
@@ -145,56 +155,54 @@ def parse_ocr_text_to_food_details(raw_text):
         item_name = re.sub(r'[xX\@\-\s]+$', '', item_name).strip()
         item_name = re.sub(r'\s+', ' ', item_name).strip()
         
-        if len(item_name) >= 3 and not any(kw in item_name.lower() for kw in metadata_keywords):
+        if len(item_name) >= 2 and not any(kw in item_name.lower() for kw in metadata_keywords):
             if not any(f["name"].lower() == item_name.lower() for f in food_items):
-                is_food = any(kw in item_name.lower() for kw in food_keywords)
-                if is_food or item_qty is not None or len(item_name.split()) >= 2:
-                    unit_p = prices[0] if len(prices) >= 1 else None
-                    tot_p = prices[1] if len(prices) >= 2 else (unit_p if unit_p else None)
-                    if unit_p and tot_p and item_qty and unit_p * item_qty == tot_p:
-                        needs_rev = False
-                    elif unit_p and tot_p and item_qty:
-                        needs_rev = True
-                    else:
-                        needs_rev = False
+                unit_p = prices[0] if len(prices) >= 1 else None
+                tot_p = prices[1] if len(prices) >= 2 else (unit_p if unit_p else None)
+                
+                # Deduce missing quantity if unit_p and tot_p exist
+                if item_qty is None and unit_p and tot_p and unit_p > 0 and tot_p >= unit_p:
+                    calc_qty = round(tot_p / unit_p)
+                    if 1 <= calc_qty <= 50:
+                        item_qty = calc_qty
 
-                    food_items.append({
-                        "name": item_name,
-                        "quantity": item_qty,
-                        "unitPrice": unit_p,
-                        "totalPrice": tot_p,
-                        "foodCategory": "Vegetarian" if not any(nk in item_name.lower() for nk in ["chicken", "mutton", "fish", "meat"]) else "Non-Vegetarian",
-                        "confidence": 0.70,
-                        "needsReview": needs_rev
-                    })
+                if item_qty is None:
+                    item_qty = 1
+
+                item_cat = "Vegetarian"
+                name_low = item_name.lower()
+                if any(nk in name_low for nk in non_veg_keywords):
+                    item_cat = "Non-Vegetarian"
+                elif any(ek in name_low for ek in egg_keywords):
+                    item_cat = "Egg"
+
+                food_items.append({
+                    "name": item_name,
+                    "quantity": item_qty,
+                    "unitPrice": unit_p,
+                    "totalPrice": tot_p,
+                    "foodCategory": item_cat,
+                    "confidence": 0.85,
+                    "needsReview": False
+                })
 
     suggested_food_name = ""
     if food_items:
         names = [f["name"] for f in food_items if f.get("name")]
         suggested_food_name = ", ".join(names[:4])
+    else:
+        suggested_food_name = "Fresh Prepared Surplus Meal"
         
-    suggested_quantity = None
-    qty_total_match = re.search(r'(?:total\s+)?(?:qty|quantity|meals|plates|pcs|pieces)\s*:?\s*([\d\.]+)', raw_text, re.IGNORECASE)
-    if qty_total_match:
-        try:
-            suggested_quantity = float(qty_total_match.group(1))
-        except ValueError:
-            pass
-            
-    if not suggested_quantity and food_items:
-        item_quantities = [f["quantity"] for f in food_items if f["quantity"] is not None]
-        if item_quantities:
-            suggested_quantity = float(sum(item_quantities))
+    item_quantities = [f["quantity"] for f in food_items if f.get("quantity") is not None]
+    suggested_quantity = float(sum(item_quantities)) if item_quantities else float(max(len(food_items), 1))
 
-    suggested_category = "Vegetarian"
-    non_veg_keywords = ["chicken", "mutton", "fish", "meat", "non-veg", "beef", "pork", "prawn", "crab"]
-    egg_keywords = ["egg", "anda"]
-    
     text_lower = raw_text.lower()
     if any(kw in text_lower for kw in non_veg_keywords):
         suggested_category = "Non-Vegetarian"
     elif any(kw in text_lower for kw in egg_keywords):
         suggested_category = "Egg"
+    else:
+        suggested_category = "Vegetarian"
         
     suggested_unit = "MEALS"
     if "kg" in text_lower or "kilogram" in text_lower:

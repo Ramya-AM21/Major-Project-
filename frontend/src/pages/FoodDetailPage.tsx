@@ -310,15 +310,27 @@ export const FoodDetailPage: React.FC = () => {
               <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">Matching Coordination</h3>
               
               <div className="grid grid-cols-2 gap-4 text-xs font-semibold">
-                <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border">
-                  <span className="text-[9px] text-natural-muted font-bold block uppercase tracking-wider">Matched Volunteer</span>
-                  <span className="font-bold text-natural-text mt-1 block">
-                    {task.volunteer && task.volunteer.user && task.volunteer.user.name ? task.volunteer.user.name : 'Unassigned (Awaiting Volunteer Claim)'}
-                  </span>
-                  <span className="text-natural-muted block mt-0.5 font-normal">
-                    {task.volunteer && task.volunteer.user ? (task.volunteer.user.phoneNumber || 'N/A') : 'No volunteer has claimed this listing yet'}
-                  </span>
-                </div>
+                {(() => {
+                  const isVolunteerAssigned = Boolean(
+                    task.volunteer?.user?.name &&
+                    listing.status !== 'AVAILABLE' &&
+                    listing.status !== 'SCHEDULED' &&
+                    task.status !== 'CREATED' &&
+                    task.status !== 'PROPOSED'
+                  );
+
+                  return (
+                    <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border">
+                      <span className="text-[9px] text-natural-muted font-bold block uppercase tracking-wider">Matched Volunteer</span>
+                      <span className="font-bold text-natural-text mt-1 block">
+                        {isVolunteerAssigned ? task.volunteer!.user.name : 'Unassigned (Awaiting Volunteer Claim)'}
+                      </span>
+                      <span className="text-natural-muted block mt-0.5 font-normal">
+                        {isVolunteerAssigned ? (task.volunteer!.user.phoneNumber || 'N/A') : 'No volunteer has claimed this listing yet'}
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border">
                   <span className="text-[9px] text-natural-muted font-bold block uppercase tracking-wider">Drop Shelter Zone</span>
