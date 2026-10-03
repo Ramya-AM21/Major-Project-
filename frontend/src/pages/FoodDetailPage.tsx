@@ -313,10 +313,10 @@ export const FoodDetailPage: React.FC = () => {
                 <div className="bg-[#FAF9F5] p-3 rounded-xl border border-natural-border">
                   <span className="text-[9px] text-natural-muted font-bold block uppercase tracking-wider">Matched Volunteer</span>
                   <span className="font-bold text-natural-text mt-1 block">
-                    {task.volunteer ? task.volunteer.user.name : 'Unassigned (Awaiting Volunteer)'}
+                    {task.volunteer && task.volunteer.user && task.volunteer.user.name ? task.volunteer.user.name : 'Unassigned (Awaiting Volunteer Claim)'}
                   </span>
                   <span className="text-natural-muted block mt-0.5 font-normal">
-                    {task.volunteer ? (task.volunteer.user.phoneNumber || 'N/A') : 'No volunteer assigned yet'}
+                    {task.volunteer && task.volunteer.user ? (task.volunteer.user.phoneNumber || 'N/A') : 'No volunteer has claimed this listing yet'}
                   </span>
                 </div>
 

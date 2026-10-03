@@ -119,6 +119,7 @@ public class DeliveryTaskService {
         DeliveryTask task = new DeliveryTask();
         task.setFoodListing(foodListing);
         task.setZone(zone);
+        task.setVolunteer(null); // Unassigned until accepted by a real volunteer
         task.setRouteDistance(matchingService.calculateDistance(
                 foodListing.getPickupLatitude(), foodListing.getPickupLongitude(),
                 zone.getLatitude(), zone.getLongitude()
