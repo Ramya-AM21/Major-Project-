@@ -677,10 +677,10 @@ export const CoordinatorDashboard: React.FC = () => {
                 <label className="block font-semibold mb-1 text-xs uppercase tracking-wider text-gray-500">
                   Verification Proof Document *
                 </label>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer border border-gray-300 px-4 py-2 hover:bg-gray-50 rounded-xl transition text-xs font-semibold text-gray-700 bg-white">
-                    <Upload className="w-4 h-4 text-gray-500" />
-                    Choose PDF or Image
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer border border-brand-300 bg-brand-50 hover:bg-brand-100 px-4 py-2.5 rounded-xl transition text-xs font-semibold text-brand-850 shadow-xs">
+                    <Upload className="w-4 h-4 text-brand-650" />
+                    <span>{selectedFile ? 'Change Proof Document' : 'Choose PDF or Image'}</span>
                     <input 
                       type="file" 
                       accept="application/pdf,image/*" 
@@ -688,20 +688,29 @@ export const CoordinatorDashboard: React.FC = () => {
                       onChange={e => e.target.files && setSelectedFile(e.target.files[0])}
                     />
                   </label>
-                  <span className="text-xs text-gray-500 font-mono truncate max-w-[200px]">
-                    {selectedFile ? selectedFile.name : 'No certificate selected'}
-                  </span>
+                  {selectedFile ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold font-mono">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="truncate max-w-[240px]">{selectedFile.name}</span>
+                      <span className="text-[10px] text-emerald-600">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400 font-mono italic">
+                      No certificate selected yet
+                    </span>
+                  )}
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1">
+                <p className="text-[10px] text-gray-400 mt-1.5">
                   Upload shelter registration license, NGO certificate, NGO identity proof or authorization letter to get verified.
                 </p>
               </div>
 
-              <div className="pt-2 sticky bottom-0 bg-white/95 backdrop-blur-xs pb-1 border-t border-gray-100">
+              {/* Prominent Submit Button */}
+              <div className="pt-4 border-t border-gray-200 mt-4">
                 <button
                   type="submit"
                   disabled={shelterSubmitting}
-                  className="w-full bg-brand-650 hover:bg-brand-700 active:scale-[0.99] text-white font-bold py-3 rounded-xl transition duration-200 shadow-md disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                  className="w-full bg-brand-650 hover:bg-brand-700 active:scale-[0.99] text-white font-bold py-3.5 px-6 rounded-xl transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 text-sm cursor-pointer z-10"
                 >
                   {shelterSubmitting ? (
                     <>
@@ -711,7 +720,7 @@ export const CoordinatorDashboard: React.FC = () => {
                   ) : (
                     <>
                       <PlusCircle className="w-4 h-4" />
-                      <span>Submit Shelter Registration</span>
+                      <span>Submit Shelter Registration & Proof</span>
                     </>
                   )}
                 </button>

@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { MapView } from '../components/MapView';
 import { 
   AlertTriangle, Check, ShieldAlert, BarChart3, Settings, MapPin, Loader2, Bot, HelpCircle,
-  X, Eye, RefreshCw, ExternalLink
+  X, Eye, RefreshCw, ExternalLink, FileText
 } from 'lucide-react';
 import axios from 'axios';
 import { FraudReviewTab } from '../components/admin/FraudReviewTab';
@@ -58,16 +58,47 @@ export const AdminDashboard: React.FC = () => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectingShelterId, setRejectingShelterId] = useState<string | null>(null);
 
-  // Full-screen Image Viewer modal states
+  // Full-screen Image / PDF Document Viewer modal states
   const [modalDocUrl, setModalDocUrl] = useState<string | null>(null);
   const [modalTitle, setModalTitle] = useState<string>('');
+  const [modalIsPdf, setModalIsPdf] = useState<boolean>(false);
   const [imgLoading, setImgLoading] = useState<boolean>(true);
   const [imgError, setImgError] = useState<boolean>(false);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
-  const openImageModal = (url: string, title: string) => {
-    setModalDocUrl(url);
+  const openImageModal = async (url: string, title: string, hintPath?: string) => {
     setModalTitle(title);
+    setModalDocUrl(url);
     setImgLoading(true);
+    setImgError(false);
+
+    const isPdfByExt = (hintPath || url).toLowerCase().includes('.pdf');
+    setModalIsPdf(isPdfByExt);
+
+    try {
+      // Fetch as blob with Authorization header automatically attached by axios
+      const res = await axios.get(url, { responseType: 'blob' });
+      const contentType = String(res.headers?.['content-type'] || '');
+      const isPdf = isPdfByExt || contentType.toLowerCase().includes('pdf');
+      setModalIsPdf(isPdf);
+
+      const objectUrl = URL.createObjectURL(res.data);
+      setBlobUrl(objectUrl);
+      setImgLoading(false);
+    } catch (err) {
+      console.warn("Blob fetch failed, falling back to direct URL:", err);
+      setBlobUrl(url);
+      setImgLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    if (blobUrl && blobUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(blobUrl);
+    }
+    setModalDocUrl(null);
+    setBlobUrl(null);
+    setImgLoading(false);
     setImgError(false);
   };
 
@@ -521,11 +552,15 @@ export const AdminDashboard: React.FC = () => {
                             <span className="block text-[8px] uppercase font-bold tracking-wider text-gray-400">Authorization Proof Document</span>
                             <div className="flex flex-wrap items-center gap-2">
                               <button 
-                                onClick={() => openImageModal(`/api/v1/admin/shelters/${shelter.id}/document`, shelter.name)}
+                                onClick={() => openImageModal(`/api/v1/admin/shelters/${shelter.id}/document`, shelter.name, shelter.documentUrl)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-brand-200 text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg text-xs font-semibold transition"
                               >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>View Proof Image / Document</span>
+                                {shelter.documentUrl.toLowerCase().endsWith('.pdf') ? (
+                                  <FileText className="w-3.5 h-3.5 text-brand-600" />
+                                ) : (
+                                  <Eye className="w-3.5 h-3.5 text-brand-600" />
+                                )}
+                                <span>{shelter.documentUrl.toLowerCase().endsWith('.pdf') ? 'View PDF Proof' : 'View Proof Image'}</span>
                               </button>
                               <a 
                                 href={`/api/v1/admin/shelters/${shelter.id}/document`} 
@@ -541,17 +576,25 @@ export const AdminDashboard: React.FC = () => {
                             
                             {/* Inline Thumbnail Box */}
                             <div 
-                              onClick={() => openImageModal(`/api/v1/admin/shelters/${shelter.id}/document`, shelter.name)}
+                              onClick={() => openImageModal(`/api/v1/admin/shelters/${shelter.id}/document`, shelter.name, shelter.documentUrl)}
                               className="cursor-pointer border border-gray-200 rounded-xl overflow-hidden relative group max-w-xs bg-gray-50 h-32 flex items-center justify-center shadow-xs"
                             >
-                              <img 
-                                src={`/api/v1/admin/shelters/${shelter.id}/document`} 
-                                alt="Authorization Proof Document" 
-                                className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).src = shelter.documentUrl;
-                                }}
-                              />
+                              {shelter.documentUrl.toLowerCase().endsWith('.pdf') ? (
+                                <div className="flex flex-col items-center justify-center p-4 text-center space-y-1">
+                                  <FileText className="w-10 h-10 text-rose-500 group-hover:scale-110 transition duration-200" />
+                                  <span className="text-[11px] font-bold text-gray-700 uppercase tracking-tight">PDF Verification Document</span>
+                                  <span className="text-[9px] text-brand-600 font-semibold">Click to preview document</span>
+                                </div>
+                              ) : (
+                                <img 
+                                  src={`/api/v1/admin/shelters/${shelter.id}/document`} 
+                                  alt="Authorization Proof Document" 
+                                  className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = shelter.documentUrl || '';
+                                  }}
+                                />
+                              )}
                               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-semibold gap-1.5">
                                 <Eye className="w-4 h-4" /> Expand Preview
                               </div>
@@ -640,30 +683,32 @@ export const AdminDashboard: React.FC = () => {
         <FraudReviewTab onOpenImageModal={openImageModal} />
       )}
 
-      {/* Full-Screen Image Viewer Modal */}
+      {/* Full-Screen Image / PDF Document Viewer Modal */}
       {modalDocUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-2xl border border-natural-border shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-natural-border shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[92vh]">
             <div className="p-4 border-b border-natural-border flex items-center justify-between bg-[#FAF9F5]">
               <div>
-                <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text">
-                  Verification Image Preview — {modalTitle}
+                <h3 className="font-bold text-xs uppercase tracking-wider text-natural-text flex items-center gap-2">
+                  {modalIsPdf ? <FileText className="w-4 h-4 text-brand-650" /> : <Eye className="w-4 h-4 text-brand-650" />}
+                  Verification Document Preview — {modalTitle}
                 </h3>
                 <span className="text-[10px] text-gray-400 font-mono">{modalDocUrl}</span>
               </div>
               <div className="flex items-center gap-2">
                 <a
-                  href={modalDocUrl}
+                  href={blobUrl || modalDocUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-1.5 text-gray-600 hover:text-brand-650 rounded-lg border border-gray-200 bg-white text-xs flex items-center gap-1 font-semibold"
-                  title="Open in new tab"
+                  download
+                  className="p-1.5 px-3 text-brand-700 hover:text-brand-850 rounded-lg border border-brand-200 bg-brand-50 text-xs flex items-center gap-1.5 font-semibold transition"
+                  title="Open original file"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Open Original</span>
+                  <span>Open Full Document</span>
                 </a>
                 <button
-                  onClick={() => setModalDocUrl(null)}
+                  onClick={closeModal}
                   className="p-1.5 text-natural-muted hover:text-natural-text rounded-lg border border-gray-200 bg-white"
                 >
                   <X className="w-4 h-4" />
@@ -671,11 +716,11 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-6 overflow-auto flex-1 flex flex-col items-center justify-center min-h-[300px] bg-gray-900/5 relative">
+            <div className="p-4 sm:p-6 overflow-auto flex-1 flex flex-col items-center justify-center min-h-[350px] bg-gray-900/5 relative">
               {imgLoading && (
                 <div className="flex flex-col items-center justify-center text-natural-muted space-y-2 py-12">
                   <Loader2 className="w-8 h-8 text-brand-650 animate-spin" />
-                  <span className="text-xs font-semibold">Loading verification image...</span>
+                  <span className="text-xs font-semibold">Loading verification document...</span>
                 </div>
               )}
 
@@ -683,34 +728,48 @@ export const AdminDashboard: React.FC = () => {
                 <div className="flex flex-col items-center justify-center text-rose-700 bg-rose-50 border border-rose-200 p-8 rounded-2xl max-w-md text-center space-y-3">
                   <AlertTriangle className="w-10 h-10 text-rose-600" />
                   <div>
-                    <h4 className="font-bold text-sm">Unable to load verification image.</h4>
-                    <p className="text-xs text-rose-600 mt-1">The image reference could not be fetched or the file format is unsupported.</p>
+                    <h4 className="font-bold text-sm">Unable to render verification document directly.</h4>
+                    <p className="text-xs text-rose-600 mt-1">You can still open and verify the file directly in a new tab.</p>
                   </div>
-                  <button
-                    onClick={() => {
-                      setImgError(false);
-                      setImgLoading(true);
-                    }}
-                    className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Retry
-                  </button>
+                  <div className="flex gap-2">
+                    <a
+                      href={modalDocUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-brand-650 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Open Document Directly
+                    </a>
+                    <button
+                      onClick={() => openImageModal(modalDocUrl, modalTitle)}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Retry
+                    </button>
+                  </div>
                 </div>
               )}
 
-              <img
-                src={modalDocUrl}
-                alt="Verification Proof"
-                onLoad={() => setImgLoading(false)}
-                onError={() => {
-                  setImgLoading(false);
-                  setImgError(true);
-                }}
-                className={`max-h-[70vh] max-w-full object-contain rounded-xl shadow-md border border-gray-200 transition-opacity duration-200 ${
-                  imgLoading || imgError ? 'hidden' : 'block'
-                }`}
-              />
+              {!imgLoading && !imgError && blobUrl && (
+                modalIsPdf ? (
+                  <iframe
+                    src={blobUrl}
+                    title="Verification PDF Document"
+                    className="w-full h-[70vh] rounded-xl shadow-md border border-gray-200 bg-white"
+                  />
+                ) : (
+                  <img
+                    src={blobUrl}
+                    alt="Verification Proof"
+                    onError={() => {
+                      setImgError(true);
+                    }}
+                    className="max-h-[70vh] max-w-full object-contain rounded-xl shadow-md border border-gray-200"
+                  />
+                )
+              )}
             </div>
           </div>
         </div>

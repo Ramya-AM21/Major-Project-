@@ -51,6 +51,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/sessions/**").permitAll()
                 .requestMatchers("/api/v1/analytics/admin/summary").permitAll()
                 .requestMatchers("/api/v1/food/analyze-image", "/api/provider/food/analyze-image").permitAll()
+                .requestMatchers("/api/v1/admin/shelters/*/document", "/api/v1/shelters/*/document").permitAll()
                 .requestMatchers("/ws/tracking/**").permitAll()
                 .requestMatchers("/uploads/**").permitAll()
                 .anyRequest().authenticated()

@@ -45,6 +45,12 @@ public class Shelter {
 
     private String documentUrl;
 
+    @Lob
+    @Basic(fetch = FetchType.LAZY)
+    private byte[] documentData;
+
+    private String documentContentType;
+
     private LocalDateTime documentUploadedAt;
 
     @Column(nullable = false)
@@ -95,6 +101,12 @@ public class Shelter {
 
     public String getDocumentUrl() { return documentUrl; }
     public void setDocumentUrl(String documentUrl) { this.documentUrl = documentUrl; }
+
+    public byte[] getDocumentData() { return documentData; }
+    public void setDocumentData(byte[] documentData) { this.documentData = documentData; }
+
+    public String getDocumentContentType() { return documentContentType; }
+    public void setDocumentContentType(String documentContentType) { this.documentContentType = documentContentType; }
 
     public LocalDateTime getDocumentUploadedAt() { return documentUploadedAt; }
     public void setDocumentUploadedAt(LocalDateTime documentUploadedAt) { this.documentUploadedAt = documentUploadedAt; }
