@@ -225,7 +225,7 @@ public class AiIntegrationService {
                         "}\n" +
                         "Return JSON only. No markdown formatting fences.";
 
-                String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + geminiKey;
+                String[] visionModels = {"gemini-3.5-flash", "gemini-flash-latest", "gemini-3.8-flash", "gemini-2.5-flash"};
                 org.springframework.http.HttpHeaders gHeaders = new org.springframework.http.HttpHeaders();
                 gHeaders.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
 
@@ -247,34 +247,42 @@ public class AiIntegrationService {
                 reqBody.put("contents", Arrays.asList(contentObj));
 
                 org.springframework.http.HttpEntity<Map<String, Object>> gReq = new org.springframework.http.HttpEntity<>(reqBody, gHeaders);
-                ResponseEntity<Map> gResponse = restTemplate.postForEntity(geminiUrl, gReq, Map.class);
 
-                if (gResponse.getStatusCode().is2xxSuccessful() && gResponse.getBody() != null) {
-                    Map gBody = gResponse.getBody();
-                    List candidates = (List) gBody.get("candidates");
-                    if (candidates != null && !candidates.isEmpty()) {
-                        Map candidate = (Map) candidates.get(0);
-                        Map content = (Map) candidate.get("content");
-                        if (content != null) {
-                            List resParts = (List) content.get("parts");
-                            if (resParts != null && !resParts.isEmpty()) {
-                                Map firstPart = (Map) resParts.get(0);
-                                String rawText = (String) firstPart.get("text");
-                                if (rawText != null) {
-                                    rawText = rawText.trim();
-                                    if (rawText.startsWith("```json")) rawText = rawText.substring(7);
-                                    if (rawText.startsWith("```")) rawText = rawText.substring(3);
-                                    if (rawText.endsWith("```")) rawText = rawText.substring(0, rawText.length() - 3);
-                                    rawText = rawText.trim();
+                for (String modelName : visionModels) {
+                    try {
+                        String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + geminiKey;
+                        ResponseEntity<Map> gResponse = restTemplate.postForEntity(geminiUrl, gReq, Map.class);
 
-                                    Map<String, Object> aiParsed = new com.fasterxml.jackson.databind.ObjectMapper().readValue(rawText, Map.class);
-                                    aiParsed.put("success", true);
-                                    aiParsed.put("status", "SUCCESS");
-                                    aiParsed.put("source", "Direct Gemini 1.5 Flash (Java Cloud Fallback)");
-                                    return aiParsed;
+                        if (gResponse.getStatusCode().is2xxSuccessful() && gResponse.getBody() != null) {
+                            Map gBody = gResponse.getBody();
+                            List candidates = (List) gBody.get("candidates");
+                            if (candidates != null && !candidates.isEmpty()) {
+                                Map candidate = (Map) candidates.get(0);
+                                Map content = (Map) candidate.get("content");
+                                if (content != null) {
+                                    List resParts = (List) content.get("parts");
+                                    if (resParts != null && !resParts.isEmpty()) {
+                                        Map firstPart = (Map) resParts.get(0);
+                                        String rawText = (String) firstPart.get("text");
+                                        if (rawText != null) {
+                                            rawText = rawText.trim();
+                                            if (rawText.startsWith("```json")) rawText = rawText.substring(7);
+                                            if (rawText.startsWith("```")) rawText = rawText.substring(3);
+                                            if (rawText.endsWith("```")) rawText = rawText.substring(0, rawText.length() - 3);
+                                            rawText = rawText.trim();
+
+                                            Map<String, Object> aiParsed = new com.fasterxml.jackson.databind.ObjectMapper().readValue(rawText, Map.class);
+                                            aiParsed.put("success", true);
+                                            aiParsed.put("status", "SUCCESS");
+                                            aiParsed.put("source", "Direct Gemini Vision (" + modelName + ")");
+                                            return aiParsed;
+                                        }
+                                    }
                                 }
                             }
                         }
+                    } catch (Exception modelEx) {
+                        log.warn("[JAVA AI FALLBACK] Gemini model {} failed: {}", modelName, modelEx.getMessage());
                     }
                 }
             } catch (Exception gEx) {

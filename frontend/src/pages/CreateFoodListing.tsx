@@ -307,8 +307,8 @@ export const CreateFoodListing: React.FC = () => {
         }
 
         if (f.quantity !== undefined && f.quantity !== null && f.quantity !== '') {
-          const parsedQty = parseInt(String(f.quantity).replace(/[^\d]/g, ''), 10);
-          if (!isNaN(parsedQty)) {
+          const parsedQty = Math.round(parseFloat(String(f.quantity)));
+          if (!isNaN(parsedQty) && parsedQty > 0) {
             setQuantity(parsedQty);
             newSuggested.quantity = true;
           }

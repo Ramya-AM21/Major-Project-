@@ -460,9 +460,16 @@ CRITICAL INSTRUCTIONS:
      * "confidence": float between 0.0 and 1.0
      * "needs_review": boolean (set true if quantity, price, or item name is blurry/unclear)
    - Extract "totals" (subtotal, tax, discount, grand_total). Use numbers or null if not present.
-3. If it is a DIRECT FOOD PHOTO:
+3. If it is a DIRECT FOOD PHOTO (e.g. cooked food, curry, rice, roti, paneer, biryani, snacks, buffet containers, meal trays, bakery, fruit):
    - Set "is_receipt": false.
-   - List all visible food dishes in "food_items".
+   - Accurately identify each visible food dish in "food_items" (e.g. name: "Paneer Butter Masala", quantity: 1, food_category: "Vegetarian").
+   - Set "food_name" to a concise title of the visible food (e.g. "Paneer Butter Masala & Steamed Rice").
+   - Set "food_category" to "Cooked Meal", "Packaged Food", "Bakery", or "Produce".
+   - Set "food_type" strictly to "Vegetarian", "Non-Vegetarian", or "Egg".
+   - Estimate "estimated_quantity" realistically based on visual portion size (number of meals/servings).
+   - Set "estimated_servings" to the estimated number of people it can feed.
+   - Provide an informative description of the food items and packaging.
+   - Identify common allergens (e.g. Dairy, Gluten, Nuts, Peanuts, Soy, Egg).
 4. DO NOT fabricate or invent numbers. If a price or quantity is missing from the receipt, use null.
 5. "food_type" MUST be one of: "Vegetarian", "Non-Vegetarian", "Egg", "Unknown".
 6. Return JSON only. No markdown formatting fences. No explanation text.
@@ -642,6 +649,8 @@ def normalize_ai_food_response(ai_data, source):
         "description": ai_data.get("description", f"Cooked {food_name} ready for redistribution."),
         "estimated_quantity": float(total_extracted_qty),
         "estimated_servings": ai_data.get("estimated_servings") or int(total_extracted_qty),
+        "unit": "MEALS",
+        "estimated_unit": "MEALS",
         "visible_packaging": ai_data.get("visible_packaging"),
         "visible_labels": ai_data.get("visible_labels", []),
         "possible_allergens": ai_data.get("possible_allergens", []),
@@ -815,7 +824,7 @@ async def analyze_food(image: UploadFile = File(...)):
         gemini_key = os.getenv("GEMINI_API_KEY")
 
         if gemini_key:
-            models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-lite"]
+            models_to_try = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.8-flash", "gemini-2.5-flash"]
             mime_type = detect_image_mime_type(content, filename)
             image_b64 = base64.b64encode(content).decode("utf-8")
             prompt = build_food_ai_prompt("")
