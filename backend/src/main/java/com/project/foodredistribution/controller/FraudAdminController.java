@@ -36,21 +36,21 @@ public class FraudAdminController {
     @PostMapping("/assessments/{id}/approve")
     @PreAuthorize("hasAnyRole('ADMIN', 'STAKEHOLDER', 'VOLUNTEER', 'PROVIDER')")
     public ResponseEntity<FraudRiskAssessment> approveAssessment(@PathVariable UUID id, Principal principal) {
-        String adminEmail = principal != null ? principal.getName() : "admin@foodbridge.org";
+        String adminEmail = principal != null ? principal.getName() : "yashwardhankumar15@gmail.com";
         return ResponseEntity.ok(fraudDetectionService.approveAssessment(id, adminEmail));
     }
 
     @PostMapping("/assessments/{id}/reject")
     @PreAuthorize("hasAnyRole('ADMIN', 'STAKEHOLDER', 'VOLUNTEER', 'PROVIDER')")
     public ResponseEntity<FraudRiskAssessment> rejectAssessment(@PathVariable UUID id, Principal principal) {
-        String adminEmail = principal != null ? principal.getName() : "admin@foodbridge.org";
+        String adminEmail = principal != null ? principal.getName() : "yashwardhankumar15@gmail.com";
         return ResponseEntity.ok(fraudDetectionService.rejectAssessment(id, adminEmail));
     }
 
     @PostMapping("/assessments/{id}/dismiss")
     @PreAuthorize("hasAnyRole('ADMIN', 'STAKEHOLDER', 'VOLUNTEER', 'PROVIDER')")
     public ResponseEntity<FraudRiskAssessment> dismissAssessment(@PathVariable UUID id, Principal principal) {
-        String adminEmail = principal != null ? principal.getName() : "admin@foodbridge.org";
+        String adminEmail = principal != null ? principal.getName() : "yashwardhankumar15@gmail.com";
         return ResponseEntity.ok(fraudDetectionService.dismissAssessment(id, adminEmail));
     }
 }

@@ -63,7 +63,7 @@ Open `http://localhost:5173` and sign in with the following preset credentials:
 
 *   **Food Provider:** `provider1@food.com` | Password: `password`
 *   **Volunteer Commuter:** `rahul@food.com` | Password: `password`
-*   **Platform Admin:** `admin@food.com` | Password: `password`
+*   **Platform Admin:** `yashwardhankumar15@gmail.com` | Password: `1234`
 
 ---
 

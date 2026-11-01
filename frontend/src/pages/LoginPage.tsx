@@ -11,7 +11,7 @@ export const LoginPage: React.FC = () => {
 
   // Mode state: 'login' or 'register'
   const [isRegister, setIsRegister] = useState(false);
-  const [role, setRole] = useState<'PROVIDER' | 'INDIVIDUAL_DONOR' | 'VOLUNTEER' | 'COORDINATOR' | 'ADMIN'>('PROVIDER');
+  const [role, setRole] = useState<'PROVIDER' | 'INDIVIDUAL_DONOR' | 'VOLUNTEER' | 'COORDINATOR'>('PROVIDER');
 
   // Login Form Values
   const [loginEmail, setLoginEmail] = useState('');
@@ -250,13 +250,13 @@ export const LoginPage: React.FC = () => {
 
               <div>
                 <label className="block text-[9px] font-bold uppercase tracking-wider text-natural-muted mb-2">Platform Role</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 bg-[#FAF9F5] p-1.5 rounded-xl border border-natural-border">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-[#FAF9F5] p-1.5 rounded-xl border border-natural-border">
                   {[
                     { id: 'PROVIDER', label: 'Restaurant' },
                     { id: 'INDIVIDUAL_DONOR', label: 'Individual Donor' },
                     { id: 'VOLUNTEER', label: 'Volunteer' },
-                    { id: 'COORDINATOR', label: 'Coordinator' },
-                    { id: 'ADMIN', label: 'Admin' }
+                    { id: 'COORDINATOR', label: 'Coordinator' }
+
                   ].map((item) => (
                     <button
                       key={item.id}

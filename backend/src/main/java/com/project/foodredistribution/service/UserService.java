@@ -48,6 +48,10 @@ public class UserService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        if (request.getRole() == Role.ADMIN) {
+            throw new IllegalArgumentException("Administrator registration is disabled. Administrator accounts are pre-provisioned.");
+        }
+
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new IllegalArgumentException("Email already in use");
         }

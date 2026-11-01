@@ -27,7 +27,7 @@ This document details the real-world pilot testing procedure for validating the 
   - Verify requirement appears in live coordinator feed.
 
 ### 2. Platform Admin Approval Workflow
-- [ ] **Log In as Admin**: Log in with `admin@food.com` / `password`.
+- [ ] **Log In as Admin**: Log in with `yashwardhankumar15@gmail.com` / `1234`.
 - [ ] **Review Pending Shelter**:
   - Navigate to `/admin/dashboard`.
   - View pending shelter application and inspect uploaded license certificate.

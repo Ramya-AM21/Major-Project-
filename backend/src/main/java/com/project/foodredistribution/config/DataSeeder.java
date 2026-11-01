@@ -57,17 +57,16 @@ public class DataSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) throws Exception {
-        if (userRepository.count() > 0) {
-            return; // Already seeded
+        // Enforce the sole persistent Platform Administrator (Yashwardhan Kumar)
+        syncSoleAdmin();
+
+        if (foodProviderRepository.count() > 0) {
+            return; // Demo catalog already seeded
         }
 
         String commonPassword = passwordEncoder.encode("password");
 
-        // 1. Seed Admin
-        User admin = new User("System Administrator", "admin@food.com", "9999999999", commonPassword, Role.ADMIN);
-        userRepository.save(admin);
-
-        // 1b. Seed Coordinator
+        // 1. Coordinator
         User coordinator = new User("Sita Ram", "coord@food.com", "7777777777", commonPassword, Role.COORDINATOR);
         userRepository.save(coordinator);
 
@@ -219,6 +218,49 @@ public class DataSeeder implements CommandLineRunner {
             restaurantRewardRepository.save(new RestaurantReward("Urban Harvest Cafe", "Free Cappuccino with any sandwich", 75, 100, LocalDateTime.now().plusMonths(3)));
             restaurantRewardRepository.save(new RestaurantReward("City Bites", "10% off on all prepared combos", 50, 10, LocalDateTime.now().plusMonths(3)));
             restaurantRewardRepository.save(new RestaurantReward("Fresh Route Express", "25% discount voucher", 150, 25, LocalDateTime.now().plusMonths(3)));
+        }
+    }
+
+    private void syncSoleAdmin() {
+        final String adminEmail = "yashwardhankumar15@gmail.com";
+        final String adminName = "Yashwardhan Kumar";
+        final String adminPassword = passwordEncoder.encode("1234");
+
+        java.util.Optional<User> existing = userRepository.findByEmail(adminEmail);
+        if (existing.isPresent()) {
+            User user = existing.get();
+            user.setName(adminName);
+            user.setPasswordHash(adminPassword);
+            user.setRole(Role.ADMIN);
+            user.setStatus("ACTIVE");
+            userRepository.save(user);
+        } else {
+            User admin = new User(adminName, adminEmail, "9999999999", adminPassword, Role.ADMIN);
+            admin.setStatus("ACTIVE");
+            userRepository.save(admin);
+        }
+
+        // Delete any legacy demo admin account
+        userRepository.findByEmail("admin@food.com").ifPresent(oldAdmin -> {
+            try {
+                userRepository.delete(oldAdmin);
+            } catch (Exception ex) {
+                oldAdmin.setRole(Role.VOLUNTEER);
+                userRepository.save(oldAdmin);
+            }
+        });
+
+        // Ensure no other user holds Role.ADMIN in the database
+        List<User> allAdmins = userRepository.findByRole(Role.ADMIN);
+        for (User u : allAdmins) {
+            if (!u.getEmail().equalsIgnoreCase(adminEmail)) {
+                try {
+                    userRepository.delete(u);
+                } catch (Exception ex) {
+                    u.setRole(Role.VOLUNTEER);
+                    userRepository.save(u);
+                }
+            }
         }
     }
 }
