@@ -272,6 +272,16 @@ export const LoginPage: React.FC = () => {
                     </button>
                   ))}
                 </div>
+                <p className="text-[10px] text-natural-muted mt-2 font-medium">
+                  Looking for Admin? Administrator accounts cannot sign up publicly. System Admin must{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setIsRegister(false); setStatusError(null); }}
+                    className="text-brand-600 font-bold hover:underline"
+                  >
+                    Sign In
+                  </button>.
+                </p>
               </div>
 
               {/* Provider / Donor Specific Details */}

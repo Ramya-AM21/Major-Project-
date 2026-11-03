@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Utensils, Shield, Heart, ArrowRight, CheckCircle2, ChevronRight, BarChart3, Route, Trash2, Clock, Bike, UtensilsCrossed, Cpu, ShieldCheck, Globe } from 'lucide-react';
+import { Utensils, Shield, ArrowRight, CheckCircle2, ChevronRight, BarChart3, Route, Trash2, Clock, Bike, UtensilsCrossed, Cpu, ShieldCheck, Globe } from 'lucide-react';
 import axios from 'axios';
 
 export const LandingPage: React.FC = () => {
@@ -156,18 +156,6 @@ export const LandingPage: React.FC = () => {
               >
                 Start Redistributing
               </button>
-            </div>
-            
-            <div className="p-4 bg-white/80 backdrop-blur-xs border border-emerald-200 rounded-2xl max-w-lg mx-auto shadow-sm text-left flex items-center space-x-4">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-800 shrink-0 font-bold">
-                <Heart className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-natural-text uppercase tracking-wider">Your celebration can become someone's meal.</h4>
-                <p className="text-[11px] text-natural-muted leading-tight mt-0.5 font-medium">
-                  Donate surplus food from birthdays, functions and events and help it reach verified areas of need.
-                </p>
-              </div>
             </div>
           </div>
         </section>
